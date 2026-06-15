@@ -48,14 +48,20 @@ linhas = [
         comentario="FLUXO SIMPLES - FIM (CONTROLE EFETUADO VIA PA12)"),
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Tabela de controle PA12 — recebe condição de TSFL0002
+    # Tabela de controle PA12 — recebe condições de TSFL0002 e TSTAT0002
     # Nome PA12 corresponde ao padrão ^[A-Za-z]{2}\d{2}
+    # Cada job de controle lê a condição de um produtor específico
     # ─────────────────────────────────────────────────────────────────────────
     row("PA12", "PA12000", "PA12-PA12",
         carga="NAO", memlib="DUMMY", resource="DM-PA12-CTRL",
         in_counds="TSFL0002-PA12000-JBODAT",
         out_counds="TSFL0002-PA12000-JBODAT-",
         comentario="TABELA CONTROLE PA12 - RECEBE CONDICAO DE TSFL0"),
+    row("PA12", "PA12001", "PA12-PA12",
+        carga="NAO", memlib="DUMMY", resource="DM-PA12-CTRL",
+        in_counds="TSTAT0002-PA12000-JBODAT",
+        out_counds="TSTAT0002-PA12000-JBODAT-",
+        comentario="TABELA CONTROLE PA12 - RECEBE CONDICAO DE TSTAT0"),
 
     # ─────────────────────────────────────────────────────────────────────────
     # CENÁRIO 2 — Semáforo LIBERADO-JBSTAT
