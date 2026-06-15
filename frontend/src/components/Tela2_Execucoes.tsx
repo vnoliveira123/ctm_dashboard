@@ -1,129 +1,466 @@
 import React, { useState } from 'react';
+import * as d3 from 'd3';
 import {
-  Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  TextField,
-  Button,
-  CircularProgress,
-  Alert,
-  Pagination,
-  Typography,
-  Chip,
+  Box, Paper, Typography, TextField, Button, Chip, CircularProgress, Alert,
+  Pagination, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Card, CardContent, Grid,
 } from '@mui/material';
-import { useExecucoes } from '../hooks/useExecucoes';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import ClearIcon from '@mui/icons-material/Clear';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import TimerIcon from '@mui/icons-material/Timer';
+import SpeedIcon from '@mui/icons-material/Speed';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import {
+  useExecucoes, useGraficosExecucoes, useRotinasDisponiveis,
+  FiltrosExecucao, VolumeData, TopDurData, HoraData, IsdData, TimeseriesItem,
+} from '../hooks/useExecucoes';
 
-export const Tela2Execucoes: React.FC = () => {
-  const [job, setJob] = useState('');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
-  const [page, setPage] = useState(1);
+const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
+const FILTROS_VAZIOS: FiltrosExecucao = { tabela: '', job: '', grupo: '', rotina: '', data_inicio: '', data_fim: '' };
 
-  const { data, isLoading, error } = useExecucoes(
-    job || undefined,
-    dataInicio || undefined,
-    dataFim || undefined,
-    page
+// ── Helpers D3 ───────────────────────────────────────────────────────────────
+
+const W = 560;
+const MARGIN = { top: 16, right: 24, bottom: 46, left: 52 };
+const IW = W - MARGIN.left - MARGIN.right;
+
+function Eixo({ scale, ticks, orient, innerSize }: {
+  scale: d3.ScaleLinear<number,number> | d3.ScaleBand<string>;
+  ticks?: number[]; orient: 'bottom'|'left'; innerSize: number;
+}) {
+  if (orient === 'bottom') {
+    const band = scale as d3.ScaleBand<string>;
+    const domain = band.domain();
+    const step = Math.ceil(domain.length / 8);
+    return (
+      <g transform={`translate(0,${innerSize})`}>
+        <line x1={0} x2={IW} stroke="#ccc" />
+        {domain.filter((_, i) => i % step === 0).map(v => (
+          <text key={v} x={(band(v) || 0) + band.bandwidth() / 2}
+                y={18} textAnchor="middle" fontSize={9} fill="#888"
+                transform={`rotate(-30,${(band(v) || 0) + band.bandwidth() / 2},18)`}>
+            {v.length > 7 ? v.slice(-7) : v}
+          </text>
+        ))}
+      </g>
+    );
+  }
+  const lin = scale as d3.ScaleLinear<number,number>;
+  return (
+    <g>
+      <line y1={0} y2={innerSize} stroke="#ccc" />
+      {(ticks ?? lin.ticks(5)).map(t => (
+        <g key={t} transform={`translate(0,${lin(t)})`}>
+          <line x2={IW} stroke="#f0f0f0" />
+          <text x={-6} dy="0.35em" textAnchor="end" fontSize={9} fill="#888">{t}</text>
+        </g>
+      ))}
+    </g>
   );
+}
 
-  const formatarData = (val: string) => {
-    if (!val) return '-';
-    return new Date(val).toLocaleString('pt-BR');
-  };
+// ── Chart 1: Volume por data (barras empilhadas) ─────────────────────────────
+const GraficoVolumeDiario: React.FC<{ data: VolumeData[] }> = ({ data }) => {
+  if (!data.length) return <SemDados />;
+  const IH = 160;
+  const x = d3.scaleBand().domain(data.map(d => d.data)).range([0, IW]).padding(0.15);
+  const y = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([IH, 0]).nice();
+  return (
+    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        <Eixo scale={y} orient="left" innerSize={IH} />
+        <Eixo scale={x} orient="bottom" innerSize={IH} />
+        {data.map(d => (
+          <g key={d.data}>
+            <rect x={x(d.data)!} y={y(d.ok)} width={x.bandwidth()} height={IH - y(d.ok)}
+                  fill="#4caf50" opacity={0.85} />
+            <rect x={x(d.data)!} y={y(d.total)} width={x.bandwidth()} height={Math.max(0, y(d.ok) - y(d.total))}
+                  fill="#f44336" opacity={0.85} />
+          </g>
+        ))}
+        <Legend items={[{ color: '#4caf50', label: 'OK' }, { color: '#f44336', label: 'NOT OK' }]} x={IW - 90} y={-8} />
+      </g>
+    </svg>
+  );
+};
 
-  const limpar = () => {
-    setJob('');
-    setDataInicio('');
-    setDataFim('');
-    setPage(1);
-  };
+// ── Chart 2: Top 10 duração (barras horizontais) ─────────────────────────────
+const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
+  if (!data.length) return <SemDados />;
+  const barH = 22, gap = 4;
+  const IH = data.length * (barH + gap);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.avg_dur) || 1]).range([0, IW]).nice();
+  const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.15);
+  return (
+    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        {x.ticks(5).map(t => (
+          <g key={t}>
+            <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
+            <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t.toFixed(0)}</text>
+          </g>
+        ))}
+        {data.map(d => (
+          <g key={d.job}>
+            <rect x={0} y={y(d.job)!} width={x(d.avg_dur)} height={y.bandwidth()} fill="#7b1fa2" rx={2} />
+            <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                  textAnchor="end" fontSize={10} fill="#555">
+              {d.job.slice(-10)}
+            </text>
+            <text x={x(d.avg_dur) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                  fontSize={9} fill="#666">{d.avg_dur.toFixed(1)} min</text>
+          </g>
+        ))}
+        <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Duração média (min)</text>
+      </g>
+    </svg>
+  );
+};
+
+// ── Chart 3: Pizza OK vs NOT OK ───────────────────────────────────────────────
+const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
+  const total = ok + nok;
+  if (!total) return <SemDados />;
+  const R = 80, RI = 48, SZ = 220;
+  const pieData = d3.pie<{ label: string; value: number; color: string }>().value(d => d.value)([
+    { label: 'OK',     value: ok,  color: '#4caf50' },
+    { label: 'NOT OK', value: nok, color: '#f44336' },
+  ]);
+  const arc     = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(RI).outerRadius(R);
+  const arcLbl  = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
+  return (
+    <svg viewBox={`${-SZ / 2} ${-SZ / 2} ${SZ} ${SZ}`} width={SZ} height={SZ}>
+      {pieData.map((s, i) => (
+        <g key={i}>
+          <path d={arc(s) || ''} fill={s.data.color} />
+          {s.data.value / total > 0.05 && (
+            <text transform={`translate(${arcLbl.centroid(s)})`} textAnchor="middle"
+                  dy="0.35em" fontSize={12} fill="white" fontWeight="bold">
+              {Math.round(s.data.value / total * 100)}%
+            </text>
+          )}
+        </g>
+      ))}
+      <text textAnchor="middle" dy="-0.3em" fontSize={16} fontWeight="bold" fill="#333">
+        {total.toLocaleString('pt-BR')}
+      </text>
+      <text textAnchor="middle" dy="1.1em" fontSize={10} fill="#999">execuções</text>
+      <text x={-R - 10} y={R + 20} fontSize={10} fill="#4caf50">■ OK: {ok.toLocaleString('pt-BR')}</text>
+      <text x={20}      y={R + 20} fontSize={10} fill="#f44336">■ NOT OK: {nok.toLocaleString('pt-BR')}</text>
+    </svg>
+  );
+};
+
+// ── Chart 4: Por hora do dia ──────────────────────────────────────────────────
+const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
+  if (!data.length) return <SemDados />;
+  const allHours = Array.from({ length: 24 }, (_, i) => ({ hora: i, total: 0 }));
+  data.forEach(d => { allHours[d.hora].total = d.total; });
+  const IH = 150;
+  const x = d3.scaleBand().domain(allHours.map(d => String(d.hora))).range([0, IW]).padding(0.15);
+  const y = d3.scaleLinear().domain([0, d3.max(allHours, d => d.total) || 1]).range([IH, 0]).nice();
+  return (
+    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        <Eixo scale={y} orient="left" innerSize={IH} />
+        {allHours.map(d => (
+          <g key={d.hora}>
+            <rect x={x(String(d.hora))!} y={y(d.total)} width={x.bandwidth()}
+                  height={IH - y(d.total)} fill="#1976d2" rx={2} />
+            {d.hora % 3 === 0 && (
+              <text x={(x(String(d.hora)) || 0) + x.bandwidth() / 2} y={IH + 16}
+                    textAnchor="middle" fontSize={9} fill="#888">{d.hora}h</text>
+            )}
+          </g>
+        ))}
+        <line y1={IH} y2={IH} x1={0} x2={IW} stroke="#ccc" />
+        <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Hora do dia</text>
+      </g>
+    </svg>
+  );
+};
+
+// ── Chart 5: Execuções ISD ────────────────────────────────────────────────────
+const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
+  if (!data.length) return <SemDados msg="Nenhum job com ISD ativo no período selecionado." />;
+  const barH = 20, IH = data.length * (barH + 4);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW]).nice();
+  const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.2);
+  return (
+    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        {x.ticks(5).map(t => (
+          <g key={t}>
+            <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
+            <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
+          </g>
+        ))}
+        {data.map(d => (
+          <g key={d.job}>
+            <rect x={0} y={y(d.job)!} width={x(d.total)} height={y.bandwidth()} fill="#e65100" rx={2} />
+            <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                  textAnchor="end" fontSize={10} fill="#555">{d.job.slice(-10)}</text>
+            <text x={x(d.total) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                  fontSize={9} fill="#666">{d.total}</text>
+          </g>
+        ))}
+        <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
+      </g>
+    </svg>
+  );
+};
+
+// ── Chart 6: Série temporal do JOB filtrado ───────────────────────────────────
+const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string }> = ({ data, job }) => {
+  if (!job) return <SemDados msg='Aplique o filtro "Job" para ver a série temporal de execuções.' />;
+  if (!data.length) return <SemDados msg="Sem execuções para o JOB no período." />;
+  const IH = 160;
+  const dates = data.map(d => new Date(d.data));
+  const x = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, IW]);
+  const y = d3.scaleLinear().domain([0, d3.max(data, d => d.duracao) || 1]).range([IH, 0]).nice();
+  const lineGen = d3.line<TimeseriesItem>().x(d => x(new Date(d.data))).y(d => y(d.duracao));
+  return (
+    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+        {y.ticks(5).map(t => (
+          <g key={t}>
+            <line x1={0} x2={IW} y1={y(t)} y2={y(t)} stroke="#f0f0f0" />
+            <text x={-6} y={y(t)} dy="0.35em" textAnchor="end" fontSize={9} fill="#888">{t.toFixed(1)}</text>
+          </g>
+        ))}
+        <path d={lineGen(data) || ''} fill="none" stroke="#1976d2" strokeWidth={1.5} />
+        {data.map((d, i) => (
+          <circle key={i} cx={x(new Date(d.data))} cy={y(d.duracao)} r={3.5}
+                  fill={d.status === 'OK' ? '#4caf50' : '#f44336'} stroke="white" strokeWidth={0.8} />
+        ))}
+        {x.ticks(8).map(t => (
+          <text key={+t} x={x(t)} y={IH + 18} textAnchor="middle" fontSize={9} fill="#888">
+            {d3.timeFormat('%d/%m')(t)}
+          </text>
+        ))}
+        <line x1={0} x2={IW} y1={IH} y2={IH} stroke="#ccc" />
+        <text x={-28} y={IH / 2} transform={`rotate(-90,-28,${IH / 2})`} textAnchor="middle" fontSize={9} fill="#999">min</text>
+        <Legend items={[{ color: '#4caf50', label: 'OK' }, { color: '#f44336', label: 'NOT OK' }]} x={IW - 90} y={-8} />
+      </g>
+    </svg>
+  );
+};
+
+// ── Helpers visuais ───────────────────────────────────────────────────────────
+const SemDados: React.FC<{ msg?: string }> = ({ msg = 'Sem dados para o período selecionado.' }) => (
+  <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>{msg}</Typography>
+);
+
+const Legend: React.FC<{ items: { color: string; label: string }[]; x: number; y: number }> = ({ items, x, y }) => (
+  <g transform={`translate(${x},${y})`}>
+    {items.map((it, i) => (
+      <g key={it.label} transform={`translate(0,${i * 14})`}>
+        <rect width={10} height={10} fill={it.color} />
+        <text x={13} y={9} fontSize={9} fill="#555">{it.label}</text>
+      </g>
+    ))}
+  </g>
+);
+
+const InsightCard: React.FC<{ icon: React.ReactNode; label: string; value: React.ReactNode; color: string }> = ({ icon, label, value, color }) => (
+  <Card sx={{ flex: '1 1 150px', minWidth: 140, borderTop: `3px solid ${color}` }}>
+    <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, color }}>
+        {icon}
+        <Typography variant="caption" color="text.secondary" fontWeight={500}>{label}</Typography>
+      </Box>
+      <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
+    </CardContent>
+  </Card>
+);
+
+const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <Paper variant="outlined" sx={{ p: 2 }}>
+    <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>{title}</Typography>
+    {children}
+  </Paper>
+);
+
+// ── Componente principal ──────────────────────────────────────────────────────
+export const Tela2Execucoes: React.FC = () => {
+  const [filtros, setFiltros] = useState<FiltrosExecucao>(FILTROS_VAZIOS);
+  const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosExecucao>(FILTROS_VAZIOS);
+  const [page, setPage] = useState(1);
+  const [expandido, setExpandido] = useState(true);
+
+  const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
+  const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
+  const { data: rotinasData }        = useRotinasDisponiveis();
+
+  const set = (campo: keyof FiltrosExecucao) => (v: string) =>
+    setFiltros(prev => ({ ...prev, [campo]: v }));
+
+  const aplicar = () => { setFiltrosAtivos(filtros); setPage(1); };
+  const limpar  = () => { setFiltros(FILTROS_VAZIOS); setFiltrosAtivos(FILTROS_VAZIOS); setPage(1); };
+
+  const resumo = graficos?.resumo;
+  const totalPag = Math.ceil((data?.total || 0) / 20);
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" fontWeight="bold" sx={{ mb: 3 }}>
-        📈 Detalhes de Processamento
-      </Typography>
+      <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>Detalhes de Processamento</Typography>
 
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          label="Job"
-          value={job}
-          onChange={(e) => { setJob(e.target.value); setPage(1); }}
-          size="small"
-        />
-        <TextField
-          label="Data Início"
-          type="date"
-          value={dataInicio}
-          onChange={(e) => { setDataInicio(e.target.value); setPage(1); }}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="Data Fim"
-          type="date"
-          value={dataFim}
-          onChange={(e) => { setDataFim(e.target.value); setPage(1); }}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <Button variant="outlined" onClick={limpar}>Limpar</Button>
+      {/* Filtros */}
+      <Paper variant="outlined" sx={{ mb: 2 }}>
+        <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+             onClick={() => setExpandido(v => !v)}>
+          <FilterListIcon fontSize="small" color="primary" />
+          <Typography variant="subtitle2" fontWeight={600}>Filtros</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            {expandido ? 'Recolher ▲' : 'Expandir ▼'}
+          </Typography>
+        </Box>
+        <Collapse in={expandido}>
+          <Divider />
+          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
+                         onChange={e => set('tabela')(e.target.value)} />
+              <TextField label="Job"    value={filtros.job}    size="small" sx={{ minWidth: 150 }}
+                         onChange={e => set('job')(e.target.value)} />
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Grupo</InputLabel>
+                <Select value={filtros.grupo} label="Grupo" onChange={e => set('grupo')(e.target.value as string)}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  {GRUPOS.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Rotina</InputLabel>
+                <Select value={filtros.rotina} label="Rotina" onChange={e => set('rotina')(e.target.value as string)}>
+                  <MenuItem value=""><em>Todas</em></MenuItem>
+                  {(rotinasData?.rotinas ?? []).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TextField label="Data Início" type="date" value={filtros.data_inicio} size="small"
+                         InputLabelProps={{ shrink: true }} onChange={e => set('data_inicio')(e.target.value)} />
+              <TextField label="Data Fim"   type="date" value={filtros.data_fim}    size="small"
+                         InputLabelProps={{ shrink: true }} onChange={e => set('data_fim')(e.target.value)} />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button variant="contained" size="small" onClick={aplicar}>Aplicar Filtros</Button>
+              <Button variant="outlined"  size="small" startIcon={<ClearIcon />} onClick={limpar}>Limpar</Button>
+            </Box>
+          </Box>
+        </Collapse>
+      </Paper>
+
+      {/* Insight Cards */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+        <InsightCard icon={<TimerIcon fontSize="small" />} label="Execuções"
+          value={resumo?.total?.toLocaleString('pt-BR') ?? 0} color="#1976d2" />
+        <InsightCard icon={<CheckCircleIcon fontSize="small" />} label="OK"
+          value={resumo?.ok?.toLocaleString('pt-BR') ?? 0} color="#2e7d32" />
+        <InsightCard icon={<CancelIcon fontSize="small" />} label="NOT OK"
+          value={resumo?.nok?.toLocaleString('pt-BR') ?? 0} color="#c62828" />
+        <InsightCard icon={<SpeedIcon fontSize="small" />} label="Duração Média"
+          value={resumo ? `${resumo.duracao_media.toFixed(1)} min` : '-'} color="#e65100" />
+        <InsightCard icon={<EmojiEventsIcon fontSize="small" />} label="Maior Duração"
+          value={
+            resumo?.job_maior_duracao && resumo.job_maior_duracao !== '-'
+              ? <Box><Typography variant="caption" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                  {resumo.job_maior_duracao}
+                </Typography>{resumo.maior_duracao.toFixed(1)} min</Box>
+              : '-'
+          } color="#7b1fa2" />
       </Box>
 
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Erro ao carregar execuções. Verifique se a API está respondendo.</Alert>}
+      {/* Gráficos — grid 2 colunas */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={8}>
+          <ChartCard title="Volume de Execuções por Data">
+            <GraficoVolumeDiario data={graficos?.volume_por_data ?? []} />
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <ChartCard title="Status: OK vs NOT OK">
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
+            </Box>
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ChartCard title="Top 10 Jobs por Duração Média (min)">
+            <GraficoTopDuracao data={graficos?.top_duracao ?? []} />
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ChartCard title="Execuções por Hora do Dia">
+            <GraficoHorario data={graficos?.por_hora ?? []} />
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ChartCard title="Jobs com ISD — Volume de Execuções">
+            <GraficoISD data={graficos?.isd_execucoes ?? []} />
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ChartCard title={`Série Temporal${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
+            <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} />
+          </ChartCard>
+        </Grid>
+      </Grid>
+
+      {/* Tabela */}
+      {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>}
+      {error    && <Alert severity="error">Erro ao carregar execuções. Verifique se a API está respondendo.</Alert>}
 
       {data && !isLoading && (
         <>
-          {data.execucoes?.length === 0 ? (
-            <Alert severity="info">Nenhuma execução encontrada. Execute o ETL para importar dados.</Alert>
-          ) : (
-            <TableContainer component={Paper}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: '#1976d2' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Tabela</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Job</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Grupo</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Data Execução</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Duração (min)</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.execucoes?.map((exec: any, idx: number) => (
-                    <TableRow key={idx} hover>
-                      <TableCell>{exec.tabela}</TableCell>
-                      <TableCell>{exec.job}</TableCell>
-                      <TableCell>{exec.grupo}</TableCell>
-                      <TableCell>{formatarData(exec.data_execucao)}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={exec.status}
-                          size="small"
-                          color={exec.status === 'SUCCESS' ? 'success' : 'error'}
-                        />
-                      </TableCell>
-                      <TableCell>{exec.duracao_minutos ?? '-'}</TableCell>
+          {data.execucoes.length === 0
+            ? <Alert severity="info">Nenhuma execução encontrada para os filtros selecionados.</Alert>
+            : (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'primary.main' }}>
+                      {['Tabela', 'Job', 'Grupo', 'Data / Hora', 'Status', 'Duração (min)'].map(c => (
+                        <TableCell key={c} sx={{ color: 'white', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{c}</TableCell>
+                      ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-            <Pagination
-              count={Math.ceil((data.total || 0) / 20)}
-              page={page}
-              onChange={(_, v) => setPage(v)}
-              color="primary"
-            />
+                  </TableHead>
+                  <TableBody>
+                    {data.execucoes.map((e, i) => (
+                      <TableRow key={i} hover>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{e.tabela}</TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{e.job}</TableCell>
+                        <TableCell>
+                          <Chip label={e.grupo?.split('-')[0]} size="small" variant="outlined" color="primary" />
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>
+                          {e.data_execucao ? new Date(e.data_execucao).toLocaleString('pt-BR') : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={e.status}
+                            size="small"
+                            color={e.status === 'OK' ? 'success' : 'error'}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>
+                          {e.duracao_minutos != null ? e.duracao_minutos.toFixed(2) : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )
+          }
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary">
+              {data.total.toLocaleString('pt-BR')} registro{data.total !== 1 ? 's' : ''}
+            </Typography>
+            <Pagination count={totalPag} page={page} onChange={(_, v) => setPage(v)} color="primary" size="small" />
           </Box>
         </>
       )}
