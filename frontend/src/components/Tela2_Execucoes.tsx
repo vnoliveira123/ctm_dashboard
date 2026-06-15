@@ -358,32 +358,30 @@ export const Tela2Execucoes: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job"    value={filtros.job}    size="small" sx={{ minWidth: 150 }}
+              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('job')(e.target.value)} />
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Grupo</InputLabel>
                 <Select value={filtros.grupo} label="Grupo" onChange={e => set('grupo')(e.target.value as string)}>
                   <MenuItem value=""><em>Todos</em></MenuItem>
                   {GRUPOS.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Rotina</InputLabel>
                 <Select value={filtros.rotina} label="Rotina" onChange={e => set('rotina')(e.target.value as string)}>
                   <MenuItem value=""><em>Todas</em></MenuItem>
                   {(rotinasData?.rotinas ?? []).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
                 </Select>
               </FormControl>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField label="Data Início" type="date" value={filtros.data_inicio} size="small"
                          InputLabelProps={{ shrink: true }} onChange={e => set('data_inicio')(e.target.value)} />
-              <TextField label="Data Fim"   type="date" value={filtros.data_fim}    size="small"
+              <TextField label="Data Fim" type="date" value={filtros.data_fim} size="small"
                          InputLabelProps={{ shrink: true }} onChange={e => set('data_fim')(e.target.value)} />
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Status</InputLabel>
                 <Select value={filtros.status} label="Status" onChange={e => set('status')(e.target.value as string)}>
                   <MenuItem value=""><em>Todos</em></MenuItem>

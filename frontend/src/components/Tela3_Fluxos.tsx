@@ -206,13 +206,11 @@ export const Tela3Fluxos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job"    value={filtros.job}    size="small" sx={{ minWidth: 150 }}
+              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('job')(e.target.value)} />
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Grupo</InputLabel>
                 <Select value={filtros.grupo} label="Grupo"
@@ -244,7 +242,7 @@ export const Tela3Fluxos: React.FC = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
+              <FormControl size="small" sx={{ minWidth: 155 }}>
                 <InputLabel>Carga Automática</InputLabel>
                 <Select value={filtros.carga} label="Carga Automática"
                         onChange={e => set('carga')(e.target.value as string)}>
