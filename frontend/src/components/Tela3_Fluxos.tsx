@@ -126,7 +126,8 @@ export const Tela3Fluxos: React.FC = () => {
   const [expandido, setExpandido]         = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const { data, isLoading, error } = useFluxosGrafo(filtrosAtivos);
+  const temFiltro = Object.values(filtrosAtivos).some(v => v !== '');
+  const { data, isLoading, error } = useFluxosGrafo(filtrosAtivos, temFiltro);
   const { data: rotinasData }      = useRotinasFluxos();
 
   const set = (campo: keyof FiltrosFluxo) => (v: string) =>
@@ -186,8 +187,6 @@ export const Tela3Fluxos: React.FC = () => {
     svg.call(zoom.transform, d3.zoomIdentity);
     return () => { svg.on('.zoom', null); };
   }, [layout]);
-
-  const temFiltro = Object.values(filtrosAtivos).some(v => v !== '');
 
   return (
     <Box sx={{ p: 3 }}>
@@ -288,12 +287,22 @@ export const Tela3Fluxos: React.FC = () => {
       {isLoading && <CircularProgress />}
       {error    && <Alert severity="error">Erro ao carregar fluxos.</Alert>}
 
-      {data && !isLoading && (
+      {!temFiltro && !isLoading && (
+        <Paper variant="outlined" sx={{
+          p: 6, textAlign: 'center', bgcolor: '#f9fafb', borderStyle: 'dashed',
+        }}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            Selecione ao menos um filtro para visualizar o fluxo
+          </Typography>
+          <Typography variant="body2" color="text.disabled">
+            Use Tabela, Job, Grupo, Rotina, Posição ou Carga para carregar o grafo.
+          </Typography>
+        </Paper>
+      )}
+
+      {temFiltro && data && !isLoading && (
         data.nodes.length === 0 ? (
-          <Alert severity="info">
-            Nenhum processo encontrado com os filtros aplicados.
-            {!temFiltro && ' Execute o ETL para gerar as dependências.'}
-          </Alert>
+          <Alert severity="info">Nenhum processo encontrado com os filtros aplicados.</Alert>
         ) : (
           <>
             {data.nodes.length > 80 && (

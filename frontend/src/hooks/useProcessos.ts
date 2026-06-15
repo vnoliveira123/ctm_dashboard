@@ -41,11 +41,20 @@ export interface ProcessoItem {
 }
 
 export interface ResumoProcessos {
-  total_jobs: number;
+  total_jobs:    number;
   total_tabelas: number;
   tabelas_carga: number;
-  tabelas_isd: number;
+  tabelas_isd:   number;
   tabelas_alerta: number;
+  jobs_alerta:   number;
+}
+
+export interface GraficosProcessos {
+  periodicidades:  { periodicidade: string; total: number }[];
+  jobs_por_tabela: { tabela: string; total_jobs: number }[];
+  carga:   { sim: number; nao: number; total: number };
+  isd:     { sim: number; nao: number; total: number };
+  alertas: { sim: number; nao: number; total: number };
 }
 
 export interface RespostaProcessos {
@@ -81,6 +90,16 @@ export const useProcessos = (filtros: FiltrosProcesso = {}, page: number = 1) =>
     },
   });
 };
+
+export const useGraficosProcessos = () =>
+  useQuery<GraficosProcessos>({
+    queryKey: ['processos-graficos'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/api/processos/graficos`);
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
 export const useFiltrosDisponiveis = () => {
   return useQuery<{ periodicidades: string[] }>({

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from api.db.database import get_db
-from api.db.queries import get_processos, get_stats_processo, get_stats_dashboard, get_periodicidades_disponiveis
+from api.db.queries import get_processos, get_processos_graficos, get_stats_processo, get_stats_dashboard, get_periodicidades_disponiveis
 from typing import Optional, List
 
 router = APIRouter()
@@ -13,6 +13,12 @@ async def listar_opcoes_filtro(db: Session = Depends(get_db)):
     return {
         "periodicidades": get_periodicidades_disponiveis(db),
     }
+
+
+@router.get("/graficos")
+async def obter_graficos_processos(db: Session = Depends(get_db)):
+    """Dados agregados globais para os gráficos da tela de Processos."""
+    return get_processos_graficos(db)
 
 
 @router.get("/")

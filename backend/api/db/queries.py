@@ -68,15 +68,62 @@ def get_processos(db: Session, skip=0, limit=20,
         return q.with_entities(func.count(func.distinct(Processo.tabela))).scalar() or 0
 
     resumo = {
-        'total_jobs': total,
+        'total_jobs':    total,
         'total_tabelas': base.with_entities(func.count(func.distinct(Processo.tabela))).scalar() or 0,
         'tabelas_carga': _count_distinct_tabela(carga='SIM'),
-        'tabelas_isd': _count_distinct_tabela(isd='SIM'),
+        'tabelas_isd':   _count_distinct_tabela(isd='SIM'),
         'tabelas_alerta': _count_distinct_tabela(tem_alerta=True),
+        'jobs_alerta':   base.filter(Processo.tem_alerta == True).count(),
     }
 
     processos = base.order_by(Processo.tabela, Processo.job).offset(skip).limit(limit).all()
     return {'processos': processos, 'total': total, 'resumo': resumo}
+
+
+def get_processos_graficos(db: Session):
+    """Dados agregados globais para os gráficos da tela de Processos."""
+    # 1. Jobs por periodicidade
+    perio_rows = (
+        db.query(Processo.periodicidade, func.count(Processo.id).label('total'))
+        .filter(Processo.periodicidade != None)
+        .group_by(Processo.periodicidade)
+        .order_by(desc('total'))
+        .all()
+    )
+
+    # 2. Top 15 tabelas por número de jobs
+    tabela_rows = (
+        db.query(Processo.tabela, func.count(Processo.id).label('total_jobs'))
+        .group_by(Processo.tabela)
+        .order_by(desc('total_jobs'))
+        .limit(15)
+        .all()
+    )
+
+    # 3. Tabelas com/sem carga automática
+    total_tab   = db.query(func.count(func.distinct(Processo.tabela))).scalar() or 0
+    carga_sim   = db.query(func.count(func.distinct(Processo.tabela))).filter(Processo.carga == 'SIM').scalar() or 0
+
+    # 4. Tabelas com/sem ISD
+    isd_sim     = db.query(func.count(func.distinct(Processo.tabela))).filter(Processo.isd == 'SIM').scalar() or 0
+
+    # 5. Jobs com/sem alerta
+    total_jobs  = db.query(func.count(Processo.id)).scalar() or 0
+    alerta_sim  = db.query(func.count(Processo.id)).filter(Processo.tem_alerta == True).scalar() or 0
+
+    return {
+        'periodicidades': [
+            {'periodicidade': r.periodicidade or 'Indefinido', 'total': r.total}
+            for r in perio_rows
+        ],
+        'jobs_por_tabela': [
+            {'tabela': r.tabela, 'total_jobs': r.total_jobs}
+            for r in tabela_rows
+        ],
+        'carga':   {'sim': carga_sim,  'nao': total_tab  - carga_sim,  'total': total_tab},
+        'isd':     {'sim': isd_sim,    'nao': total_tab  - isd_sim,    'total': total_tab},
+        'alertas': {'sim': alerta_sim, 'nao': total_jobs - alerta_sim, 'total': total_jobs},
+    }
 
 
 def get_processo_by_id(db: Session, tabela: str, job: str, grupo: str):

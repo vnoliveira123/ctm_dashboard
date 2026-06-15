@@ -33,9 +33,10 @@ export interface Grafo {
   edges: GrafoEdge[];
 }
 
-export const useFluxosGrafo = (filtros: FiltrosFluxo = {}) => {
+export const useFluxosGrafo = (filtros: FiltrosFluxo = {}, enabled = true) => {
   return useQuery({
     queryKey: ['fluxos-grafo', filtros],
+    enabled,
     queryFn: async () => {
       const p = new URLSearchParams();
       if (filtros.grupo)         p.append('grupo',         filtros.grupo);
