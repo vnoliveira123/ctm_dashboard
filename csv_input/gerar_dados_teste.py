@@ -233,8 +233,9 @@ TABELAS_TESTE = {l.split("|")[0] for l in linhas}
 with open(CSV_PATH, "r", encoding="utf-8") as f:
     linhas_originais = f.readlines()
 
-header   = linhas_originais[:1]
-producao = [l for l in linhas_originais[1:] if l.split("|")[0] not in TABELAS_TESTE]
+header = linhas_originais[:1]
+producao = [l for l in linhas_originais[1:]
+            if l.split("|")[0] not in TABELAS_TESTE]
 removidas = len(linhas_originais) - 1 - len(producao)
 
 with open(CSV_PATH, "w", encoding="utf-8", newline="\n") as f:
