@@ -221,14 +221,18 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
 };
 
 // ── Chart 5: Execuções ISD (scroll) ──────────────────────────────────────────
+// viewBox mais largo que os outros gráficos para compensar a largura total do grid
+const W_ISD  = 1100;
+const IW_ISD = W_ISD - MARGIN.left - MARGIN.right;
+
 const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
   if (!data.length) return <SemDados msg="Nenhum job com ISD ativo no período selecionado." />;
-  const barH = 20, IH = data.length * (barH + 4);
-  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW]).nice();
+  const barH = 16, IH = data.length * (barH + 4);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW_ISD]).nice();
   const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.2);
   return (
     <Box sx={{ maxHeight: 96, overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
+      <svg viewBox={`0 0 ${W_ISD} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
            style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
         <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
           {x.ticks(5).map(t => (
@@ -246,7 +250,7 @@ const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
                     fontSize={9} fill="#666">{d.total}</text>
             </g>
           ))}
-          <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
+          <text x={IW_ISD / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
         </g>
       </svg>
     </Box>
