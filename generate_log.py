@@ -1,12 +1,12 @@
 """
-Gerador de LOG sintético — cenário produtivo
-  Período  : 01/01/2026 a 30/06/2026  (181 dias corridos)
-  Jobs      : lidos de CTM.csv  (todos DIARIO, 7 dias/semana)
-  Volume    : ~58.000.386 linhas
-  Estimativa: 136.978 jobs × 181 dias × E[n_exec=2,34] = 58.015.662
+Gerador de LOG sintético — escala de desenvolvimento
+  Período  : 01/05/2026 a 30/05/2026  (30 dias corridos)
+  Jobs      : lidos de CTM.csv  (~68.489 jobs)
+  Volume    : até 1.000.000 linhas (cap)
+  Estimativa: 68.489 jobs × ~6 dias × E[n_exec=2,34] ≈ 960.000 linhas
 
-Grava em modo streaming (sem buffer em memória) → uso de RAM ~100 MB.
-Tempo estimado: 15–30 min dependendo do disco.
+Grava em modo streaming → uso de RAM ~30 MB.
+Tempo estimado: < 1 min.
 """
 import csv
 import random
@@ -19,10 +19,12 @@ random.seed(99)
 CTM_PATH = Path(__file__).parent / 'csv_input' / 'CTM.csv'
 LOG_PATH  = Path(__file__).parent / 'csv_input' / 'LOG.csv'
 
-# Período: 01/01/2026 a 30/06/2026
-START_DATE = datetime(2026, 1, 1)
-END_DATE   = datetime(2026, 6, 30)
-TOTAL_DAYS = (END_DATE - START_DATE).days + 1   # 181
+# Período: 01/05/2026 a 30/05/2026  (30 dias para gráficos de série temporal)
+START_DATE = datetime(2026, 5, 1)
+END_DATE   = datetime(2026, 5, 30)
+TOTAL_DAYS = (END_DATE - START_DATE).days + 1   # 30
+
+MAX_ROWS = 1_000_000
 
 FIELDNAMES = [
     'TABELA', 'JOB', 'GRUPO',
@@ -116,7 +118,7 @@ with open(CTM_PATH, encoding='utf-8', newline='') as f:
 n_jobs = len(jobs)
 print(f'CTM carregado: {n_jobs:,} jobs')
 print(f'Periodo      : {START_DATE:%d/%m/%Y} - {END_DATE:%d/%m/%Y}  ({TOTAL_DAYS} dias)')
-print(f'Volume alvo  : ~58.000.386 linhas  (E[n_exec]=2,34 x {n_jobs:,} x {TOTAL_DAYS} dias)')
+print(f'Volume alvo  : até {MAX_ROWS:,} linhas  (E[n_exec]=2,34 x {n_jobs:,} x {TOTAL_DAYS} dias)')
 print(f'Arquivo saída: {LOG_PATH}')
 print()
 
@@ -132,25 +134,36 @@ with open(LOG_PATH, 'w', newline='', encoding='utf-8') as f:
 
     while cur_date <= END_DATE:
         day_num += 1
+        done = False
 
         for job in jobs:
             records = gerar_execucoes(job, cur_date)
+            # Respeita o cap de MAX_ROWS
+            remaining = MAX_ROWS - total_written
+            if remaining <= 0:
+                done = True
+                break
+            if len(records) > remaining:
+                records = records[:remaining]
             writer.writerows(records)
             total_written += len(records)
+            if total_written >= MAX_ROWS:
+                done = True
+                break
 
-        # Progresso a cada 15 dias ou no último dia
-        if day_num % 15 == 0 or cur_date == END_DATE:
+        # Progresso a cada 5 dias ou no último dia
+        if day_num % 5 == 0 or cur_date == END_DATE or done:
             elapsed = time.time() - t0
-            pct     = day_num / TOTAL_DAYS
-            eta_s   = (elapsed / pct) * (1 - pct) if pct > 0 else 0
-            eta_min = eta_s / 60
-            mb_written = total_written * 100 / 1_048_576   # estimativa ~100 bytes/linha
+            pct     = total_written / MAX_ROWS
+            mb_written = total_written * 100 / 1_048_576
             print(
                 f'[{pct*100:5.1f}%]  {cur_date:%d/%m/%Y}'
-                f'  |  {total_written:>14,} linhas'
+                f'  |  {total_written:>10,} / {MAX_ROWS:,} linhas'
                 f'  |  ~{mb_written:,.0f} MB'
-                f'  |  ETA ~{eta_min:.0f} min'
             )
+
+        if done:
+            break
 
         cur_date += timedelta(days=1)
 
@@ -159,8 +172,8 @@ ok_rate_approx = 88.0  # percentual aproximado
 
 print()
 print('=' * 54)
-print(f'Concluído em {elapsed_total/60:.1f} min')
+print(f'Concluído em {elapsed_total:.1f} s')
 print(f'Total de linhas : {total_written:,}')
 print(f'Taxa OK estimada: ~{ok_rate_approx:.0f}%')
 print(f'Arquivo         : {LOG_PATH}')
-print(f'Tamanho estimado: ~{total_written * 100 / 1_073_741_824:.1f} GB')
+print(f'Tamanho estimado: ~{total_written * 100 / 1_048_576:.0f} MB')
