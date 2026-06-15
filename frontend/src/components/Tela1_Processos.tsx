@@ -98,33 +98,35 @@ const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: numbe
   );
 };
 
-// ── 2. Barras horizontais — Top tabelas por jobs ──────────────────────────────
+// ── 2. Barras horizontais — Top tabelas por jobs (scroll) ────────────────────
 const GraficoJobsPorTabela: React.FC<{ data: { tabela: string; total_jobs: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const W = 380; const BH = 16; const GAP = 6; const ML = 100;
-  const xScale = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, W]);
+  const VW = 520; const BH = 16; const GAP = 6; const ML = 100;
+  const xScale = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, VW - ML - 40]);
   const totalH  = data.length * (BH + GAP);
 
   return (
-    <svg width={ML + W + 40} height={totalH + 10} style={{ width: '100%', maxWidth: ML + W + 40 }}>
-      {data.map((d, i) => {
-        const y  = i * (BH + GAP);
-        const bw = xScale(d.total_jobs);
-        return (
-          <g key={i} transform={`translate(0,${y})`}>
-            <text x={ML - 6} y={BH / 2} textAnchor="end" fontSize={9} fill="#555" dominantBaseline="middle">
-              {trunc(d.tabela, 11)}
-            </text>
-            <rect x={ML} width={bw} height={BH} rx={3} fill="#1976d2" opacity={0.85}>
-              <title>{d.tabela}: {d.total_jobs} jobs</title>
-            </rect>
-            <text x={ML + bw + 4} y={BH / 2} fontSize={9} fill="#333" dominantBaseline="middle" fontWeight="bold">
-              {d.total_jobs}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+      <svg viewBox={`0 0 ${VW} ${totalH + 10}`} width="100%" style={{ minHeight: totalH + 10 }}>
+        {data.map((d, i) => {
+          const y  = i * (BH + GAP);
+          const bw = xScale(d.total_jobs);
+          return (
+            <g key={i} transform={`translate(0,${y})`}>
+              <text x={ML - 6} y={BH / 2} textAnchor="end" fontSize={9} fill="#555" dominantBaseline="middle">
+                {trunc(d.tabela, 11)}
+              </text>
+              <rect x={ML} width={bw} height={BH} rx={3} fill="#1976d2" opacity={0.85}>
+                <title>{d.tabela}: {d.total_jobs} jobs</title>
+              </rect>
+              <text x={ML + bw + 4} y={BH / 2} fontSize={9} fill="#333" dominantBaseline="middle" fontWeight="bold">
+                {d.total_jobs}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </Box>
   );
 };
 

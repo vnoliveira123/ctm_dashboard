@@ -227,7 +227,7 @@ const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
   const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW]).nice();
   const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.2);
   return (
-    <Box sx={{ maxHeight: 260, overflowY: 'auto' }}>
+    <Box sx={{ maxHeight: 96, overflowY: 'auto' }}>
       <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
            style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
         <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
