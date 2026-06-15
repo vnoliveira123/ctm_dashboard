@@ -94,7 +94,7 @@ const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
   const x = d3.scaleLinear().domain([0, d3.max(data, d => d.avg_dur) || 1]).range([0, IW]).nice();
   const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.15);
   return (
-    <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+    <Box sx={{ aspectRatio: '560 / 222', overflowY: 'auto' }}>
       <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
            style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
         <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
@@ -126,7 +126,7 @@ const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
 const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
   const total = ok + nok;
   if (!total) return <SemDados />;
-  const R = 80, RI = 48, CX = 140, CY = 100, VW = 560, VH = 230;
+  const R = 80, RI = 48, CX = 140, CY = 100, VW = 560, VH = 222;
   const pieData = d3.pie<{ label: string; value: number; color: string }>().value(d => d.value)([
     { label: 'OK',     value: ok,  color: '#4caf50' },
     { label: 'NOT OK', value: nok, color: '#f44336' },
@@ -176,7 +176,7 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
     allHours[d.hora] = { hora: d.hora, total: d.total, ok: d.ok ?? 0, nok: d.nok ?? 0 };
   });
   const worstHora = allHours.reduce((mx, h) => h.nok > mx.nok ? h : mx, allHours[0]);
-  const IH = 150;
+  const IH = 160;
   const x = d3.scaleBand().domain(allHours.map(d => String(d.hora))).range([0, IW]).padding(0.15);
   const y = d3.scaleLinear().domain([0, d3.max(allHours, d => d.total) || 1]).range([IH, 0]).nice();
   return (
@@ -258,20 +258,23 @@ const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
 };
 
 // ── Chart 6: Série temporal do JOB filtrado ───────────────────────────────────
-const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string; ih?: number }> = ({ data, job, ih = 160 }) => {
+// vw permite usar viewBox mais largo para gráficos em linha inteira (xs=12),
+// compensando a largura dupla e mantendo a mesma altura visual que os charts md=6.
+const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string; ih?: number; vw?: number }> = ({ data, job, ih = 160, vw = W }) => {
   if (!job) return <SemDados msg='Aplique o filtro "Job" para ver a série temporal de execuções.' />;
   if (!data.length) return <SemDados msg="Sem execuções para o JOB no período." />;
-  const IH = ih;
+  const IH  = ih;
+  const iw  = vw - MARGIN.left - MARGIN.right;
   const dates = data.map(d => new Date(d.data));
-  const x = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, IW]);
+  const x = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, iw]);
   const y = d3.scaleLinear().domain([0, d3.max(data, d => d.duracao) || 1]).range([IH, 0]).nice();
   const lineGen = d3.line<TimeseriesItem>().x(d => x(new Date(d.data))).y(d => y(d.duracao));
   return (
-    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
+    <svg viewBox={`0 0 ${vw} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
       <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
         {y.ticks(5).map(t => (
           <g key={t}>
-            <line x1={0} x2={IW} y1={y(t)} y2={y(t)} stroke="#f0f0f0" />
+            <line x1={0} x2={iw} y1={y(t)} y2={y(t)} stroke="#f0f0f0" />
             <text x={-6} y={y(t)} dy="0.35em" textAnchor="end" fontSize={9} fill="#888">{t.toFixed(1)}</text>
           </g>
         ))}
@@ -285,9 +288,9 @@ const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string; ih?: number
             {d3.timeFormat('%d/%m')(t)}
           </text>
         ))}
-        <line x1={0} x2={IW} y1={IH} y2={IH} stroke="#ccc" />
+        <line x1={0} x2={iw} y1={IH} y2={IH} stroke="#ccc" />
         <text x={-28} y={IH / 2} transform={`rotate(-90,-28,${IH / 2})`} textAnchor="middle" fontSize={9} fill="#999">min</text>
-        <Legend items={[{ color: '#4caf50', label: 'OK' }, { color: '#f44336', label: 'NOT OK' }]} x={IW - 90} y={-8} />
+        <Legend items={[{ color: '#4caf50', label: 'OK' }, { color: '#f44336', label: 'NOT OK' }]} x={iw - 90} y={-8} />
       </g>
     </svg>
   );
@@ -435,7 +438,7 @@ export const Tela2Execucoes: React.FC = () => {
 
       {/* Série temporal — largura total, altura compacta */}
       <ChartCard title={`Série Temporal de Execuções${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
-        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={130} />
+        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={160} vw={1120} />
       </ChartCard>
 
       {/* Gráficos — grid 2 colunas */}
