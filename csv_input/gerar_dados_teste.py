@@ -10,6 +10,7 @@ CSV_PATH = os.path.join(os.path.dirname(__file__), "CTM.csv")
 #           TEM_ALERTA|ALERTA_CONFIG|TIPO_ALERTA|PADRAO|MAXQAIT|FROMTIME|UNTILTIME|
 #           CONFIRM|MEMLIB|RESOURCE|PERIODICIDADE|CALENDARIO|INTERSIT|IN_COUNDS|OUT_COUNDS|COMENTARIO
 
+
 def row(tabela, job, grupo, carga="SIM", horario="07", isd="NAO", evento_isd="",
         tem_alerta="NAO", alerta_cfg="", tipo_alerta="", padrao="SIM",
         maxqait="00", fromtime="07:00", untiltime="08:00", confirm="",
@@ -63,7 +64,7 @@ linhas = [
     row("TLIB0", "TLIB0000", "PR12-TLIB0",
         carga="SIM", resource="NC-PR12-INIT",
         in_counds="LIBERADO-TLIB0-JBSTAT",          # lê semáforo sem deletar
-        out_counds="TLIB0000-TLIB0001-JBODAT+",
+        out_counds="LIBERADO-TLIB0-JBSTAT-TLIB0000-TLIB0001-JBODAT+",
         comentario="SEMAFORO LIBERADO - INICIO (LE JBSTAT SEM DELETAR)"),
     row("TLIB0", "TLIB0001", "PR12-TLIB0",
         carga="SIM", resource="NC-PR12-INIT",
@@ -104,7 +105,8 @@ linhas = [
         carga="SIM", horario="19", fromtime="19:00", untiltime="23:00",
         resource="NC-PR41-INIT",
         in_counds="TCTLB0000-TCTLB0001-JBODAT",
-        out_counds="TCTLB0000-TCTLB0001-JBODAT-LIBERADO-TCTLA0-JBSTAT+",  # restaura semáforo da TCTLA → loop aparente
+        # restaura semáforo da TCTLA → loop aparente
+        out_counds="TCTLB0000-TCTLB0001-JBODAT-LIBERADO-TCTLA0-JBSTAT+",
         comentario="CROSS-TABLE TCTLB - FIM (RESTAURA SEMAFORO TCTLA - LOOP APARENTE IGNORADO)"),
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -154,7 +156,8 @@ linhas = [
     row("TJBST0", "TJBST0000", "PR12-TJBST0",
         carga="SIM", resource="NC-PR12-INIT",
         in_counds="LIBERADO-TJBST0-JBSTAT",
-        out_counds="TJBST0000-TJBST0001-JBODAT+LIBERADO-TJBST0-JBSTAT-",  # deleta JBSTAT (padrão JBSTAT-)
+        # deleta JBSTAT (padrão JBSTAT-)
+        out_counds="TJBST0000-TJBST0001-JBODAT+LIBERADO-TJBST0-JBSTAT-",
         comentario="PADRAO JBSTAT- : INICIO LE E DELETA SEMAFORO NO OUT"),
     row("TJBST0", "TJBST0001", "PR12-TJBST0",
         carga="SIM", resource="NC-PR12-INIT",
@@ -165,7 +168,8 @@ linhas = [
     # JBPREV : lê condição do dia anterior
     row("TPREV0", "TPREV0000", "PR21-TPREV0",
         carga="SIM", resource="NC-PR21-INIT",
-        in_counds="TPREV-ATIVO-JBPREV",              # lê condição de ontem e deleta no OUT
+        # lê condição de ontem e deleta no OUT
+        in_counds="TPREV-ATIVO-JBPREV",
         out_counds="TPREV-ATIVO-JBPREV-TPREV0000-TPREV0001-JBODAT+",
         comentario="PADRAO JBPREV : INICIO LE E DELETA CONDICAO DO DIA ANTERIOR"),
     row("TPREV0", "TPREV0001", "PR21-TPREV0",
@@ -179,12 +183,14 @@ linhas = [
         carga="SIM", horario="22", fromtime="22:00", untiltime="23:59",
         resource="NC-PR21-INIT",
         in_counds="",
-        out_counds="TNEXT-INICIO-JOBNEXT+",          # produz condição de amanhã (JOBNEXT+)
+        # produz condição de amanhã (JOBNEXT+)
+        out_counds="TNEXT-INICIO-JOBNEXT+",
         comentario="PADRAO JOBNEXT : PRODUZ CONDICAO PARA O PROXIMO DIA"),
     row("TNEXT0", "TNEXT0001", "PR21-TNEXT0",
         carga="SIM", horario="22", fromtime="22:00", untiltime="23:59",
         resource="NC-PR21-INIT",
-        in_counds="TNEXT-INICIO-JOBNEXT",            # lê JOBNEXT (condição produzida ontem) sem deletar → read-only JBODAT equivalente
+        # lê JOBNEXT (condição produzida ontem) sem deletar → read-only JBODAT equivalente
+        in_counds="TNEXT-INICIO-JOBNEXT",
         out_counds="TNEXT-INICIO-JOBNEXT-TNEXT0001-TNEXT0002-JBODAT+",
         comentario="PADRAO JOBNEXT : LE CONDICAO DO DIA ANTERIOR E DELETA"),
     row("TNEXT0", "TNEXT0002", "PR21-TNEXT0",
@@ -202,8 +208,10 @@ linhas = [
         comentario="JBODAT READ-ONLY : PRODUZ EVENTO"),
     row("TRDOL0", "TRDOL0001", "PR21-TRDOL0",
         carga="SIM", resource="NC-PR21-INIT",
-        in_counds="TRDOL-EVENTO-JBODAT",             # lê evento SEM deletar no OUT (read-only)
-        out_counds="TRDOL0001-TRDOL0002-JBODAT+",   # encadeia próximo JOB mas não deleta o evento
+        # lê evento SEM deletar no OUT (read-only)
+        in_counds="TRDOL-EVENTO-JBODAT",
+        # encadeia próximo JOB mas não deleta o evento
+        out_counds="TRDOL0001-TRDOL0002-JBODAT+",
         comentario="JBODAT READ-ONLY : LE EVENTO SEM DELETAR E ENCADEIA"),
     row("TRDOL0", "TRDOL0002", "PR21-TRDOL0",
         carga="SIM", resource="NC-PR21-INIT",

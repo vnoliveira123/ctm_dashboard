@@ -4,6 +4,7 @@ import * as d3 from 'd3';
 import {
   Box, TextField, Button, CircularProgress, Alert, Typography, Paper,
   FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Chip,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon      from '@mui/icons-material/Clear';
@@ -22,6 +23,7 @@ const COR: Record<string, string> = {
   fim:    '#b71c1c',
 };
 const LABEL: Record<string, string> = { inicio: 'Início', meio: 'Meio', fim: 'Fim' };
+const POS_ORDER: Record<string, number> = { inicio: 0, meio: 1, fim: 2 };
 
 // ── Tipos do layout ───────────────────────────────────────────────────────────
 interface LayoutNode extends GrafoNode { x: number; y: number }
@@ -141,6 +143,131 @@ const Legenda: React.FC = () => (
     </Box>
   </Box>
 );
+
+// ── Chip de posição colorido ──────────────────────────────────────────────────
+const PosChip: React.FC<{ posicao: string }> = ({ posicao }) => {
+  const cor = COR[posicao] ?? COR.meio;
+  return (
+    <Box sx={{
+      display: 'inline-flex', alignItems: 'center', gap: 0.5,
+      px: 1, py: 0.3, borderRadius: 1,
+      bgcolor: `${cor}18`, border: `1px solid ${cor}55`,
+    }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: cor, flexShrink: 0 }} />
+      <Typography variant="caption" fontWeight={600} sx={{ color: cor, lineHeight: 1 }}>
+        {LABEL[posicao] ?? posicao}
+      </Typography>
+    </Box>
+  );
+};
+
+// ── Chip de controle ──────────────────────────────────────────────────────────
+const ControleChip: React.FC<{ efetuado: boolean; suscetivel: boolean }> = ({ efetuado, suscetivel }) => {
+  if (efetuado)
+    return <Chip size="small" label="Efetuado"
+                 sx={{ bgcolor: '#2e7d32', color: 'white', fontSize: 11, height: 20 }} />;
+  if (suscetivel)
+    return <Chip size="small" label="Suscetível"
+                 sx={{ bgcolor: '#e65100', color: 'white', fontSize: 11, height: 20 }} />;
+  return <Typography variant="caption" color="text.disabled">—</Typography>;
+};
+
+// ── Tabela de jobs resultantes do filtro ──────────────────────────────────────
+const TabelaJobs: React.FC<{ nodes: GrafoNode[] }> = ({ nodes }) => {
+  const rows = useMemo(() =>
+    [...nodes].sort((a, b) => {
+      const t = a.tabela.localeCompare(b.tabela);
+      if (t !== 0) return t;
+      const p = (POS_ORDER[a.posicao] ?? 1) - (POS_ORDER[b.posicao] ?? 1);
+      if (p !== 0) return p;
+      return a.label.localeCompare(b.label);
+    }),
+  [nodes]);
+
+  const TH: React.FC<{ children: React.ReactNode; w?: number | string }> = ({ children, w }) => (
+    <TableCell sx={{ fontWeight: 700, fontSize: 12, py: 1, bgcolor: '#1565c0', color: 'white', whiteSpace: 'nowrap', width: w }}>
+      {children}
+    </TableCell>
+  );
+
+  return (
+    <Paper variant="outlined" sx={{ mt: 2, borderRadius: 2, overflow: 'hidden' }}>
+      <Box sx={{ px: 2, py: 1.2, bgcolor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
+        <Typography variant="subtitle2" fontWeight={700}>
+          Detalhe dos Jobs — {rows.length} registro{rows.length !== 1 ? 's' : ''}
+        </Typography>
+      </Box>
+      <TableContainer sx={{ maxHeight: 380 }}>
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TH w={110}>Tabela</TH>
+              <TH w={120}>Job</TH>
+              <TH w={70}>Rotina</TH>
+              <TH w={160}>Grupo</TH>
+              <TH>IN_COUNDS</TH>
+              <TH>OUT_COUNDS</TH>
+              <TH w={90}>Posição</TH>
+              <TH w={60}>Carga</TH>
+              <TH w={75}>Horário</TH>
+              <TH w={110}>Controle</TH>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((n, i) => (
+              <TableRow key={n.id} hover
+                        sx={{ bgcolor: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                <TableCell sx={{ fontSize: 12, fontWeight: 600, color: '#e64a19', fontFamily: 'monospace' }}>
+                  {n.tabela}
+                </TableCell>
+                <TableCell sx={{ fontSize: 12, fontFamily: 'monospace' }}>{n.label}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{n.tabela.slice(0, 4)}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{n.grupo}</TableCell>
+                <TableCell sx={{ maxWidth: 220, overflow: 'hidden' }}>
+                  {n.in_counds ? (
+                    <Tooltip title={n.in_counds} placement="top" arrow>
+                      <Typography variant="caption" fontFamily="monospace"
+                                  sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help', color: '#1565c0' }}>
+                        {n.in_counds}
+                      </Typography>
+                    </Tooltip>
+                  ) : <Typography variant="caption" color="text.disabled">—</Typography>}
+                </TableCell>
+                <TableCell sx={{ maxWidth: 220, overflow: 'hidden' }}>
+                  {n.out_counds ? (
+                    <Tooltip title={n.out_counds} placement="top" arrow>
+                      <Typography variant="caption" fontFamily="monospace"
+                                  sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help', color: '#b71c1c' }}>
+                        {n.out_counds}
+                      </Typography>
+                    </Tooltip>
+                  ) : <Typography variant="caption" color="text.disabled">—</Typography>}
+                </TableCell>
+                <TableCell><PosChip posicao={n.posicao} /></TableCell>
+                <TableCell>
+                  {n.carga === 'SIM' ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#ff8f00', flexShrink: 0 }} />
+                      <Typography variant="caption" fontWeight={600}>SIM</Typography>
+                    </Box>
+                  ) : (
+                    <Typography variant="caption" color="text.disabled">—</Typography>
+                  )}
+                </TableCell>
+                <TableCell sx={{ fontSize: 12 }}>
+                  {n.carga === 'SIM' && n.horario_carga ? `${n.horario_carga}h` : '—'}
+                </TableCell>
+                <TableCell>
+                  <ControleChip efetuado={n.controle_efetuado} suscetivel={n.suscetivel_controle} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
+  );
+};
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export const Tela3Fluxos: React.FC = () => {
@@ -368,6 +495,7 @@ export const Tela3Fluxos: React.FC = () => {
                 </g>
               </svg>
             </Paper>
+            <TabelaJobs nodes={data.nodes} />
           </>
         )
       )}

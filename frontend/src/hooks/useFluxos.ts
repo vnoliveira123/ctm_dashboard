@@ -21,6 +21,9 @@ export interface GrafoNode {
   tabela:               string;
   posicao:              'inicio' | 'meio' | 'fim';
   carga:                string;
+  horario_carga:        string;
+  in_counds:            string;
+  out_counds:           string;
   controle_efetuado:    boolean;
   suscetivel_controle:  boolean;
 }
