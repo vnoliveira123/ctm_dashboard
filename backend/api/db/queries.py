@@ -132,10 +132,11 @@ def get_execucoes(db: Session, skip=0, limit=20,
 
 def get_execucoes_graficos(db: Session,
                             tabela=None, job=None, grupo_prefix=None,
-                            rotina=None, data_inicio=None, data_fim=None):
+                            rotina=None, data_inicio=None, data_fim=None,
+                            status=None):
     base = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabela, job, grupo_prefix, rotina, data_inicio, data_fim,
+        tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
     )
 
     # ── Resumo ───────────────────────────────────────────────────

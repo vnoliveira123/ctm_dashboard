@@ -18,7 +18,7 @@ import {
 } from '../hooks/useExecucoes';
 
 const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
-const FILTROS_VAZIOS: FiltrosExecucao = { tabela: '', job: '', grupo: '', rotina: '', data_inicio: '', data_fim: '' };
+const FILTROS_VAZIOS: FiltrosExecucao = { tabela: '', job: '', grupo: '', rotina: '', data_inicio: '', data_fim: '', status: '' };
 
 // ── Helpers D3 ───────────────────────────────────────────────────────────────
 
@@ -345,6 +345,18 @@ export const Tela2Execucoes: React.FC = () => {
                          InputLabelProps={{ shrink: true }} onChange={e => set('data_inicio')(e.target.value)} />
               <TextField label="Data Fim"   type="date" value={filtros.data_fim}    size="small"
                          InputLabelProps={{ shrink: true }} onChange={e => set('data_fim')(e.target.value)} />
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Status</InputLabel>
+                <Select value={filtros.status} label="Status" onChange={e => set('status')(e.target.value as string)}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  <MenuItem value="OK">
+                    <Chip label="OK" size="small" color="success" sx={{ pointerEvents: 'none' }} />
+                  </MenuItem>
+                  <MenuItem value="NOT OK">
+                    <Chip label="NOT OK" size="small" color="error" sx={{ pointerEvents: 'none' }} />
+                  </MenuItem>
+                </Select>
+              </FormControl>
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button variant="contained" size="small" onClick={aplicar}>Aplicar Filtros</Button>

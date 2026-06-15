@@ -21,6 +21,7 @@ async def obter_graficos(
     rotina: Optional[str] = Query(None),
     data_inicio: Optional[str] = Query(None),
     data_fim: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Retorna todos os dados agregados para os gráficos do painel."""
@@ -28,6 +29,7 @@ async def obter_graficos(
         db,
         tabela=tabela, job=job, grupo_prefix=grupo,
         rotina=rotina, data_inicio=data_inicio, data_fim=data_fim,
+        status=status,
     )
 
 
