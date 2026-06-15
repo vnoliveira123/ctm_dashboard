@@ -382,7 +382,9 @@ export const Tela1Processos: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         {p.tem_alerta
-                          ? <Chip label={p.tipo_alerta ?? 'Alerta'} size="small" color="error" />
+                          ? p.tipo_alerta === 'U-ECS'
+                            ? <Chip label="U-ECS (Padrão)" size="small" color="success" />
+                            : <Chip label={`${p.tipo_alerta ?? 'Alerta'} (Fora padrão)`} size="small" color="error" />
                           : <Chip label="Não" size="small" variant="outlined" />}
                       </TableCell>
                     </TableRow>

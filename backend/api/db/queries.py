@@ -36,8 +36,10 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
         query = query.filter(Processo.evento_isd == evento_isd)
     if tem_alerta is not None:
         query = query.filter(Processo.tem_alerta == tem_alerta)
-    if padrao:
-        query = query.filter(Processo.padrao == padrao)
+    if padrao == 'SIM':
+        query = query.filter(Processo.tipo_alerta == 'U-ECS')
+    elif padrao == 'NAO':
+        query = query.filter(Processo.tipo_alerta != 'U-ECS')
     if tipo_alerta:
         query = query.filter(Processo.tipo_alerta == tipo_alerta)
     return query
