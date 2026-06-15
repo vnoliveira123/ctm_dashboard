@@ -145,7 +145,7 @@ linhas = [
     row("TSTAT0", "TSTAT0002", "PR12-TSTAT0",
         carga="SIM", resource="NC-PR12-INIT",
         in_counds="TSTAT0001-TSTAT0002-JBODAT",
-        out_counds="TSTAT0001-TSTAT0002-JBODAT-ABERTO-TSTAT0-JBSTAT+",
+        out_counds="TSTAT0001-TSTAT0002-JBODAT-ABERTO-TSTAT0-JBSTAT+TSTAT0002-PA12000-JBODAT+",
         comentario="STAT NOME ABERTO - FIM (RESTAURA JBSTAT+)"),
 
     # ─────────────────────────────────────────────────────────────────────────
