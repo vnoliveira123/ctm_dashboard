@@ -208,59 +208,109 @@ def get_execucoes(db: Session, skip=0, limit=20,
     return {'execucoes': execucoes, 'total': total}
 
 
-def get_execucoes_graficos(db: Session,
-                            tabela=None, job=None, grupo_prefix=None,
-                            rotina=None, data_inicio=None, data_fim=None,
-                            status=None):
-    base = _build_exec_filter(
-        db.query(ExecucaoTimeline),
-        tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
-    )
+# WHERE reutilizável nas queries ao Continuous Aggregate
+_CAGG_WHERE = """
+    (:tabela    IS NULL OR tabela ILIKE :tabela)
+AND (:job       IS NULL OR job    ILIKE :job)
+AND (:grupo     IS NULL OR grupo  LIKE  :grupo)
+AND (:rotina    IS NULL OR LEFT(tabela, 4) = :rotina)
+AND (:dt_inicio IS NULL OR dia >= :dt_inicio)
+AND (:dt_fim    IS NULL OR dia <  :dt_fim)
+"""
 
-    # ── Resumo ───────────────────────────────────────────────────
-    total    = base.count()
-    ok_count = base.filter(ExecucaoTimeline.status == 'OK').count()
-    nok_count = total - ok_count
-    avg_dur  = base.with_entities(func.avg(ExecucaoTimeline.duracao_minutos)).scalar() or 0
 
-    top_job_row = (
-        base.with_entities(
-            ExecucaoTimeline.job,
-            func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
-        )
-        .filter(ExecucaoTimeline.duracao_minutos != None)
-        .group_by(ExecucaoTimeline.job)
-        .order_by(desc('max_dur'))
-        .first()
-    )
+def _cagg_params(tabela, job, grupo_prefix, rotina, data_inicio, data_fim) -> dict:
+    return {
+        'tabela':    f'%{tabela}%' if tabela else None,
+        'job':       f'%{job}%'    if job    else None,
+        'grupo':     f'{grupo_prefix}-%' if grupo_prefix else None,
+        'rotina':    rotina,
+        'dt_inicio': data_inicio,
+        'dt_fim': (
+            (datetime.fromisoformat(data_fim) + timedelta(days=1)).isoformat()
+            if data_fim else None
+        ),
+    }
 
-    # ── Volume por data (stacked OK / NOT OK) ────────────────────
-    volume_rows = (
-        base.with_entities(
-            func.date(ExecucaoTimeline.data_execucao).label('dt'),
-            func.count(ExecucaoTimeline.id).label('total'),
-            func.sum(case((ExecucaoTimeline.status == 'OK',  1), else_=0)).label('ok'),
-            func.sum(case((ExecucaoTimeline.status == 'NOT OK', 1), else_=0)).label('nok'),
-        )
-        .group_by(func.date(ExecucaoTimeline.data_execucao))
-        .order_by(func.date(ExecucaoTimeline.data_execucao))
-        .all()
-    )
 
-    # ── Top 10 por duração média ──────────────────────────────────
-    top_dur_rows = (
-        base.with_entities(
-            ExecucaoTimeline.job,
-            func.avg(ExecucaoTimeline.duracao_minutos).label('avg_dur'),
-            func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
-        )
-        .filter(ExecucaoTimeline.duracao_minutos != None)
-        .group_by(ExecucaoTimeline.job)
-        .order_by(desc('avg_dur'))
-        .all()
-    )
+def _graficos_via_cagg(
+    db: Session, base,
+    tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+) -> dict:
+    """
+    Gera os dados dos gráficos consultando o Continuous Aggregate cagg_execucoes_dia.
+    Resumo e volume diário são calculados a partir de dados pré-computados, sem
+    tocar na hypertable de 58 M linhas. Raises se o cagg não estiver disponível.
+    """
+    p = _cagg_params(tabela, job, grupo_prefix, rotina, data_inicio, data_fim)
 
-    # ── Execuções por hora do dia (com breakdown OK / NOT OK) ────
+    # ── Resumo: total/ok/nok/avg_dur do cagg ─────────────────────────────────
+    # avg_dur ponderada por volume: SUM(avg_dur * total) / SUM(total)
+    res = db.execute(text(f"""
+        SELECT
+            SUM(total)                                        AS total,
+            SUM(ok)                                           AS ok,
+            SUM(nok)                                          AS nok,
+            SUM(avg_dur * total) / NULLIF(SUM(total), 0)     AS avg_dur,
+            MAX(max_dur)                                      AS max_dur_global
+        FROM cagg_execucoes_dia
+        WHERE {_CAGG_WHERE}
+    """), p).fetchone()
+
+    total_raw = int(res.total or 0)
+    ok_raw    = int(res.ok   or 0)
+    nok_raw   = int(res.nok  or 0)
+    avg_dur   = float(res.avg_dur or 0)
+
+    # Aplica filtro de status nos totais
+    if status == 'OK':
+        total_count, ok_count, nok_count = ok_raw, ok_raw, 0
+    elif status == 'NOT OK':
+        total_count, ok_count, nok_count = nok_raw, 0, nok_raw
+    else:
+        total_count, ok_count, nok_count = total_raw, ok_raw, nok_raw
+
+    # Job com maior duração máxima
+    top_job = db.execute(text(f"""
+        SELECT job, MAX(max_dur) AS max_dur
+        FROM cagg_execucoes_dia
+        WHERE {_CAGG_WHERE} AND max_dur IS NOT NULL
+        GROUP BY job ORDER BY max_dur DESC LIMIT 1
+    """), p).fetchone()
+
+    # ── Volume por data (pré-computado) ──────────────────────────────────────
+    vol_rows = db.execute(text(f"""
+        SELECT
+            dia::date  AS dt,
+            SUM(total) AS total,
+            SUM(ok)    AS ok,
+            SUM(nok)   AS nok
+        FROM cagg_execucoes_dia
+        WHERE {_CAGG_WHERE}
+        GROUP BY dia
+        HAVING SUM(total) > 0
+        ORDER BY dia
+    """), p).fetchall()
+
+    def _vol_total(r):
+        if status == 'OK':     return int(r.ok  or 0)
+        if status == 'NOT OK': return int(r.nok or 0)
+        return int(r.total or 0)
+
+    # ── Top 10 por duração média (avg_dur do cagg é por todos os status) ─────
+    top_dur = db.execute(text(f"""
+        SELECT
+            job,
+            SUM(avg_dur * total) / NULLIF(SUM(total), 0)  AS avg_dur,
+            MAX(max_dur)                                   AS max_dur
+        FROM cagg_execucoes_dia
+        WHERE {_CAGG_WHERE} AND avg_dur IS NOT NULL
+        GROUP BY job
+        ORDER BY avg_dur DESC
+        LIMIT 10
+    """), p).fetchall()
+
+    # ── Por hora: cagg é diário — query no hypertable (mais rápido que na tabela plana)
     hora_rows = (
         base.with_entities(
             extract('hour', ExecucaoTimeline.data_execucao).label('hora'),
@@ -273,7 +323,136 @@ def get_execucoes_graficos(db: Session,
         .all()
     )
 
-    # ── Execuções de jobs com ISD = SIM ──────────────────────────
+    return {
+        'resumo': {
+            'total':              total_count,
+            'ok':                 ok_count,
+            'nok':                nok_count,
+            'duracao_media':      round(avg_dur, 2),
+            'job_maior_duracao':  top_job.job      if top_job else '-',
+            'maior_duracao':      round(float(top_job.max_dur), 2) if top_job and top_job.max_dur else 0,
+        },
+        'volume_por_data': [
+            {'data': str(r.dt), 'total': _vol_total(r), 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
+            for r in vol_rows
+        ],
+        'top_duracao': [
+            {'job': r.job,
+             'avg_dur': round(float(r.avg_dur or 0), 2),
+             'max_dur': round(float(r.max_dur or 0), 2)}
+            for r in top_dur
+        ],
+        'por_hora': [
+            {'hora': int(r.hora), 'total': r.total, 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
+            for r in hora_rows
+        ],
+    }
+
+
+def _graficos_via_orm(db: Session, base, status) -> dict:
+    """Fallback sem TimescaleDB: queries ORM direto na tabela/hypertable."""
+    total    = base.count()
+    ok_count = base.filter(ExecucaoTimeline.status == 'OK').count()
+    nok_count = total - ok_count
+    avg_dur   = base.with_entities(func.avg(ExecucaoTimeline.duracao_minutos)).scalar() or 0
+
+    top_job_row = (
+        base.with_entities(
+            ExecucaoTimeline.job,
+            func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
+        )
+        .filter(ExecucaoTimeline.duracao_minutos != None)
+        .group_by(ExecucaoTimeline.job)
+        .order_by(desc('max_dur'))
+        .first()
+    )
+
+    vol_rows = (
+        base.with_entities(
+            func.date(ExecucaoTimeline.data_execucao).label('dt'),
+            func.count(ExecucaoTimeline.id).label('total'),
+            func.sum(case((ExecucaoTimeline.status == 'OK',     1), else_=0)).label('ok'),
+            func.sum(case((ExecucaoTimeline.status == 'NOT OK', 1), else_=0)).label('nok'),
+        )
+        .group_by(func.date(ExecucaoTimeline.data_execucao))
+        .order_by(func.date(ExecucaoTimeline.data_execucao))
+        .all()
+    )
+
+    top_dur_rows = (
+        base.with_entities(
+            ExecucaoTimeline.job,
+            func.avg(ExecucaoTimeline.duracao_minutos).label('avg_dur'),
+            func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
+        )
+        .filter(ExecucaoTimeline.duracao_minutos != None)
+        .group_by(ExecucaoTimeline.job)
+        .order_by(desc('avg_dur'))
+        .all()
+    )
+
+    hora_rows = (
+        base.with_entities(
+            extract('hour', ExecucaoTimeline.data_execucao).label('hora'),
+            func.count(ExecucaoTimeline.id).label('total'),
+            func.sum(case((ExecucaoTimeline.status == 'OK',     1), else_=0)).label('ok'),
+            func.sum(case((ExecucaoTimeline.status == 'NOT OK', 1), else_=0)).label('nok'),
+        )
+        .group_by(extract('hour', ExecucaoTimeline.data_execucao))
+        .order_by('hora')
+        .all()
+    )
+
+    if status == 'OK':
+        total_count, ok_count, nok_count = ok_count, ok_count, 0
+    elif status == 'NOT OK':
+        total_count, ok_count, nok_count = nok_count, 0, nok_count
+    else:
+        total_count = total
+
+    return {
+        'resumo': {
+            'total':             total_count,
+            'ok':                ok_count,
+            'nok':               nok_count,
+            'duracao_media':     round(float(avg_dur), 2),
+            'job_maior_duracao': top_job_row.job if top_job_row else '-',
+            'maior_duracao':     round(float(top_job_row.max_dur), 2) if top_job_row and top_job_row.max_dur else 0,
+        },
+        'volume_por_data': [
+            {'data': str(r.dt), 'total': r.total, 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
+            for r in vol_rows
+        ],
+        'top_duracao': [
+            {'job': r.job, 'avg_dur': round(float(r.avg_dur or 0), 2), 'max_dur': round(float(r.max_dur or 0), 2)}
+            for r in top_dur_rows
+        ],
+        'por_hora': [
+            {'hora': int(r.hora), 'total': r.total, 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
+            for r in hora_rows
+        ],
+    }
+
+
+def get_execucoes_graficos(db: Session,
+                            tabela=None, job=None, grupo_prefix=None,
+                            rotina=None, data_inicio=None, data_fim=None,
+                            status=None):
+    base = _build_exec_filter(
+        db.query(ExecucaoTimeline),
+        tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+    )
+
+    # Caminho rápido: Continuous Aggregate (TimescaleDB)
+    try:
+        graficos = _graficos_via_cagg(
+            db, base, tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+        )
+    except Exception:
+        # Fallback: queries ORM direto na tabela (sem TimescaleDB ou cagg vazio)
+        graficos = _graficos_via_orm(db, base, status)
+
+    # ── ISD e série temporal: sempre consultam o hypertable ──────────────────
     isd_base = (
         db.query(
             ExecucaoTimeline.job,
@@ -301,7 +480,6 @@ def get_execucoes_graficos(db: Session,
         .all()
     )
 
-    # ── Série temporal (apenas quando job específico filtrado) ────
     timeseries = []
     if job:
         ts_rows = (
@@ -316,40 +494,17 @@ def get_execucoes_graficos(db: Session,
         )
         timeseries = [
             {
-                'data': r.data_execucao.isoformat() if r.data_execucao else None,
+                'data':    r.data_execucao.isoformat() if r.data_execucao else None,
                 'duracao': float(r.duracao_minutos or 0),
-                'status': r.status,
+                'status':  r.status,
             }
             for r in ts_rows
         ]
 
     return {
-        'resumo': {
-            'total': total,
-            'ok': ok_count,
-            'nok': nok_count,
-            'duracao_media': round(float(avg_dur), 2),
-            'job_maior_duracao': top_job_row.job if top_job_row else '-',
-            'maior_duracao': round(float(top_job_row.max_dur), 2) if top_job_row and top_job_row.max_dur else 0,
-        },
-        'volume_por_data': [
-            {'data': str(r.dt), 'total': r.total, 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
-            for r in volume_rows
-        ],
-        'top_duracao': [
-            {'job': r.job, 'avg_dur': round(float(r.avg_dur or 0), 2), 'max_dur': round(float(r.max_dur or 0), 2)}
-            for r in top_dur_rows
-        ],
-        'por_hora': [
-            {'hora': int(r.hora), 'total': r.total,
-             'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
-            for r in hora_rows
-        ],
-        'isd_execucoes': [
-            {'job': r.job, 'total': r.total}
-            for r in isd_rows
-        ],
-        'timeseries': timeseries,
+        **graficos,
+        'isd_execucoes': [{'job': r.job, 'total': r.total} for r in isd_rows],
+        'timeseries':    timeseries,
     }
 
 

@@ -85,12 +85,14 @@ class ProcessoStats(Base):
 
 class ExecucaoTimeline(Base):
     __tablename__ = 'mat_execucoes_timeline'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    tabela = Column(String(100), nullable=False)
-    job = Column(String(100), nullable=False)
-    grupo = Column(String(100), nullable=False)
-    data_execucao = Column(DateTime, nullable=False)
-    status = Column(String(50), nullable=False)
-    duracao_minutos = Column(Float)
+
+    # TimescaleDB exige que unique constraints incluam a coluna de partição.
+    # Composite PK (id, data_execucao) satisfaz esse requisito.
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    tabela        = Column(String(100), nullable=False)
+    job           = Column(String(100), nullable=False)
+    grupo         = Column(String(100), nullable=False)
+    data_execucao = Column(DateTime, nullable=False, primary_key=True)
+    status        = Column(String(50), nullable=False)
+    duracao_minutos  = Column(Float)
     data_atualizacao = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

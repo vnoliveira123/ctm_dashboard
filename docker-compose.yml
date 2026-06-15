@@ -1,6 +1,6 @@
 ﻿services:
   postgres:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     environment:
       POSTGRES_USER: log_dashboard
       POSTGRES_PASSWORD: log_dashboard_password

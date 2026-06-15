@@ -83,13 +83,14 @@ def agregar_processos(db: Session) -> int:
 def agregar_execucoes_timeline(db: Session) -> int:
     """
     Popula mat_execucoes_timeline via INSERT...SELECT puro no banco.
-    Evita carregar 58 M+ objetos ORM na memória Python.
+    Com TimescaleDB, o TRUNCATE age sobre o hypertable (todos os chunks).
+    Ao final, atualiza o Continuous Aggregate cagg_execucoes_dia.
     """
     try:
-        # Truncate é instantâneo para tabelas grandes
-        db.execute(text('TRUNCATE TABLE mat_execucoes_timeline RESTART IDENTITY'))
+        # TRUNCATE: instantâneo em hypertables (descarta todos os chunks)
+        db.execute(text('TRUNCATE TABLE mat_execucoes_timeline'))
 
-        # INSERT...SELECT: PostgreSQL processa tudo server-side, sem tráfego Python
+        # INSERT...SELECT: processamento 100% server-side — zero tráfego Python
         db.execute(text('''
             INSERT INTO mat_execucoes_timeline
                 (tabela, job, grupo, data_execucao, status, duracao_minutos, data_atualizacao)
@@ -110,8 +111,20 @@ def agregar_execucoes_timeline(db: Session) -> int:
         count = db.execute(
             text('SELECT COUNT(*) FROM mat_execucoes_timeline')
         ).scalar() or 0
-
         logger.info(f'Timeline atualizada: {count:,} registros')
+
+        # Atualiza o Continuous Aggregate (TimescaleDB) — pré-computa dados diários
+        try:
+            db.execute(text(
+                "CALL refresh_continuous_aggregate("
+                "    'cagg_execucoes_dia', NULL, NOW()"
+                ")"
+            ))
+            db.commit()
+            logger.info('Continuous Aggregate cagg_execucoes_dia atualizado')
+        except Exception as cagg_err:
+            logger.info('Continuous Aggregate indisponível (não-TimescaleDB): %s', cagg_err)
+
         return count
 
     except Exception as e:
