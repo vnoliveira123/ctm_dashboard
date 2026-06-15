@@ -15,12 +15,13 @@ async def listar_rotinas_processos(db: Session = Depends(get_db)):
 
 @router.get("/grafo")
 async def obter_grafo_fluxos(
-    grupo:    Optional[str] = Query(None),
-    tabela:   Optional[str] = Query(None),
-    job:      Optional[str] = Query(None),
-    rotina:   Optional[str] = Query(None),
-    posicao:  Optional[str] = Query(None),
-    carga:    Optional[str] = Query(None),
+    grupo:         Optional[str] = Query(None),
+    tabela:        Optional[str] = Query(None),
+    job:           Optional[str] = Query(None),
+    rotina:        Optional[str] = Query(None),
+    posicao:       Optional[str] = Query(None),
+    carga:         Optional[str] = Query(None),
+    horario_carga: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Retorna nós e arestas para o grafo de fluxo, com filtros."""
@@ -28,4 +29,5 @@ async def obter_grafo_fluxos(
         db,
         grupo=grupo, tabela=tabela, job=job,
         rotina=rotina, posicao=posicao, carga=carga,
+        horario_carga=horario_carga,
     )

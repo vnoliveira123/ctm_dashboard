@@ -333,7 +333,7 @@ def get_rotinas_processos(db: Session) -> List[str]:
 
 
 def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
-                     rotina=None, posicao=None, carga=None):
+                     rotina=None, posicao=None, carga=None, horario_carga=None):
     # 1. Filtrar processos
     q = db.query(Processo)
     if grupo:
@@ -346,6 +346,8 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
         q = q.filter(func.left(Processo.tabela, 4) == rotina)
     if carga:
         q = q.filter(Processo.carga == carga)
+    if horario_carga:
+        q = q.filter(Processo.horario_carga == horario_carga)
 
     processos = q.all()
 

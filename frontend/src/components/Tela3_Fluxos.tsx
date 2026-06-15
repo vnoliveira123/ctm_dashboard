@@ -12,8 +12,9 @@ import { useFluxosGrafo, useRotinasFluxos, FiltrosFluxo, GrafoNode, GrafoEdge } 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const NW = 144;   // node width
 const NH = 58;    // node height
-const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
-const FILTROS_VAZIOS: FiltrosFluxo = { grupo: '', tabela: '', job: '', rotina: '', posicao: '', carga: '' };
+const GRUPOS   = ['PR12', 'PR21', 'PR31', 'PR41'];
+const HORARIOS = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
+const FILTROS_VAZIOS: FiltrosFluxo = { grupo: '', tabela: '', job: '', rotina: '', posicao: '', carga: '', horario_carga: '' };
 
 const COR: Record<string, string> = {
   inicio: '#2e7d32',
@@ -129,7 +130,11 @@ export const Tela3Fluxos: React.FC = () => {
   const { data: rotinasData }      = useRotinasFluxos();
 
   const set = (campo: keyof FiltrosFluxo) => (v: string) =>
-    setFiltros(prev => ({ ...prev, [campo]: v }));
+    setFiltros(prev => {
+      const next = { ...prev, [campo]: v };
+      if (campo === 'carga' && v !== 'SIM') next.horario_carga = '';
+      return next;
+    });
 
   const aplicar = () => setFiltrosAtivos(filtros);
   const limpar  = () => { setFiltros(FILTROS_VAZIOS); setFiltrosAtivos(FILTROS_VAZIOS); };
@@ -249,6 +254,18 @@ export const Tela3Fluxos: React.FC = () => {
                   <MenuItem value="NAO">NAO</MenuItem>
                 </Select>
               </FormControl>
+              {filtros.carga === 'SIM' && (
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Horário de Carga</InputLabel>
+                  <Select value={filtros.horario_carga} label="Horário de Carga"
+                          onChange={e => set('horario_carga')(e.target.value as string)}>
+                    <MenuItem value=""><em>Todos</em></MenuItem>
+                    {HORARIOS.map(h => (
+                      <MenuItem key={h} value={h}>{h}h</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button variant="contained" size="small" onClick={aplicar}>Aplicar Filtros</Button>
