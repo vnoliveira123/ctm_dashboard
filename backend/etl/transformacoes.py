@@ -2,6 +2,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, text
 from api.db.models import Execucao, ProcessoStats, ExecucaoTimeline
+from api.db.database import engine
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -113,14 +114,14 @@ def agregar_execucoes_timeline(db: Session) -> int:
         ).scalar() or 0
         logger.info(f'Timeline atualizada: {count:,} registros')
 
-        # Atualiza o Continuous Aggregate (TimescaleDB) — pré-computa dados diários
+        # Atualiza o Continuous Aggregate (TimescaleDB) fora de bloco de transação
         try:
-            db.execute(text(
-                "CALL refresh_continuous_aggregate("
-                "    'cagg_execucoes_dia', NULL, NOW()"
-                ")"
-            ))
-            db.commit()
+            with engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
+                conn.execute(text(
+                    "CALL refresh_continuous_aggregate("
+                    "    'cagg_execucoes_dia', NULL, NOW()::timestamp"
+                    ")"
+                ))
             logger.info('Continuous Aggregate cagg_execucoes_dia atualizado')
         except Exception as cagg_err:
             logger.info('Continuous Aggregate indisponível (não-TimescaleDB): %s', cagg_err)
