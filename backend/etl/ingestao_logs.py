@@ -1,97 +1,121 @@
 import pandas as pd
-import numpy as np
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from api.db.models import Execucao
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-_FMT_LOG = '%H:%M - %d/%m/%y'
-
-
-def _parse_dt(val) -> datetime | None:
-    """Parseia 'hh:mm - dd/mm/yy' para datetime."""
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return None
-    try:
-        return datetime.strptime(str(val).strip(), _FMT_LOG)
-    except ValueError:
-        return None
-
-
-def _parse_minutos(val) -> float | None:
-    """Converte 'mm:ss' para float de minutos totais (ex: '10:58' → 10.967)."""
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return None
-    try:
-        partes = str(val).strip().split(':')
-        if len(partes) == 2:
-            return int(partes[0]) + int(partes[1]) / 60
-        return float(val)
-    except (ValueError, ZeroDivisionError):
-        return None
-
-
-def _clean(val):
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return None
-    s = str(val).strip()
-    return s if s else None
+_FMT_LOG    = '%H:%M - %d/%m/%y'
+_CHUNK_SIZE = 100_000   # linhas por lote
 
 
 def ingerir_logs_incremental(arquivo_csv: str, db: Session) -> int:
     """
-    Ingere o arquivo CSV de logs de execução.
-    Limpa raw_execucoes antes de reinserir (carga completa idempotente).
-    Retorna número de registros inseridos.
+    Ingere LOG.csv em lotes de 100 K linhas sem carregar o arquivo inteiro
+    na memória. Usa TRUNCATE + bulk_insert_mappings para máxima performance.
     """
     try:
-        df = pd.read_csv(arquivo_csv, sep='|', encoding='utf-8', dtype=str)
-        print(f'LOGS lidos: {len(df)} linhas')
+        # Truncate é ordens de magnitude mais rápido que DELETE para 58 M+ linhas
+        db.execute(text('TRUNCATE TABLE raw_execucoes RESTART IDENTITY'))
+        db.commit()
+        logger.info('raw_execucoes truncada')
 
-        colunas_obrigatorias = ['TABELA', 'JOB', 'GRUPO', 'STATUS']
-        for col in colunas_obrigatorias:
-            if col not in df.columns:
-                logger.error(f'Coluna obrigatória ausente: {col}')
-                return 0
+        total      = 0
+        chunk_num  = 0
+        _now       = datetime.utcnow()
+        cols_ok    = False
 
-        # Carga completa: limpa tabela antes de reinserir
-        db.query(Execucao).delete()
-        db.flush()
+        reader = pd.read_csv(
+            arquivo_csv,
+            sep='|',
+            encoding='utf-8',
+            dtype=str,
+            chunksize=_CHUNK_SIZE,
+            on_bad_lines='skip',
+        )
 
-        registros = []
-        for _, row in df.iterrows():
-            inicio = _parse_dt(row.get('INICIO'))
-            fim    = _parse_dt(row.get('FIM'))
+        for chunk in reader:
+            chunk_num += 1
 
-            if inicio is None:
-                logger.warning(f'INICIO inválido — job={row.get("JOB")} valor="{row.get("INICIO")}"')
+            # Valida colunas apenas no primeiro chunk
+            if not cols_ok:
+                for col in ('TABELA', 'JOB', 'GRUPO', 'STATUS', 'INICIO'):
+                    if col not in chunk.columns:
+                        logger.error(f'Coluna obrigatoria ausente: {col}')
+                        return 0
+                cols_ok = True
+
+            # ── Datas (vetorizado) ────────────────────────────────────────────
+            chunk['_inicio'] = pd.to_datetime(
+                chunk['INICIO'], format=_FMT_LOG, errors='coerce'
+            )
+            chunk['_fim'] = pd.to_datetime(
+                chunk['FIM'], format=_FMT_LOG, errors='coerce'
+            )
+            chunk = chunk[chunk['_inicio'].notna()].copy()
+            if chunk.empty:
                 continue
 
-            registros.append(Execucao(
-                tabela=_clean(row.get('TABELA')),
-                job=_clean(row.get('JOB')),
-                grupo=_clean(row.get('GRUPO')),
-                inicio=inicio,
-                fim=fim,
-                status=_clean(row.get('STATUS')),
-                hora_proc=_clean(row.get('HORA_PROC')),
-                minutos_proc=_parse_minutos(row.get('MINUTOS_PROC')),
-                execucoes=int(row.get('EXECUCOES', 1) or 1),
-            ))
+            # ── Duração: 'mm:ss' -> float minutos (vetorizado) ───────────────
+            _parts = chunk['MINUTOS_PROC'].str.strip().str.split(':', n=1, expand=True)
+            chunk['_min_proc'] = (
+                pd.to_numeric(_parts[0], errors='coerce') +
+                pd.to_numeric(_parts.get(1, pd.Series(['0'] * len(chunk))),
+                              errors='coerce') / 60
+            )
+            chunk['_execucoes'] = (
+                pd.to_numeric(chunk['EXECUCOES'], errors='coerce')
+                .fillna(1).astype(int)
+            )
 
-            if len(registros) % 1000 == 0:
-                db.bulk_save_objects(registros)
-                db.flush()
-                registros = []
+            # ── Montar lista de dicts para bulk insert ────────────────────────
+            # dt.to_pydatetime() converte toda a Series de uma vez
+            inicio_list = [
+                t.to_pydatetime() if pd.notna(t) else None
+                for t in chunk['_inicio']
+            ]
+            fim_list = [
+                t.to_pydatetime() if pd.notna(t) else None
+                for t in chunk['_fim']
+            ]
 
-        if registros:
-            db.bulk_save_objects(registros)
+            tabela_list    = chunk['TABELA'].where(chunk['TABELA'].notna(), None).tolist()
+            job_list       = chunk['JOB'].where(chunk['JOB'].notna(), None).tolist()
+            grupo_list     = chunk['GRUPO'].where(chunk['GRUPO'].notna(), None).tolist()
+            status_list    = chunk['STATUS'].where(chunk['STATUS'].notna(), None).tolist()
+            hora_list      = chunk['HORA_PROC'].where(chunk['HORA_PROC'].notna(), None).tolist()
+            min_proc_list  = chunk['_min_proc'].where(chunk['_min_proc'].notna(), None).tolist()
+            exec_list      = chunk['_execucoes'].tolist()
 
-        db.commit()
-        total = db.query(Execucao).count()
-        logger.info(f'LOGS ingeridos: {total} registros')
+            records = [
+                {
+                    'tabela':        tabela_list[i],
+                    'job':           job_list[i],
+                    'grupo':         grupo_list[i],
+                    'inicio':        inicio_list[i],
+                    'fim':           fim_list[i],
+                    'status':        status_list[i],
+                    'hora_proc':     hora_list[i],
+                    'minutos_proc':  min_proc_list[i],
+                    'execucoes':     exec_list[i],
+                    'data_insercao': _now,
+                }
+                for i in range(len(chunk))
+            ]
+
+            db.bulk_insert_mappings(Execucao, records)
+            db.commit()
+            total += len(records)
+
+            if chunk_num % 10 == 0:
+                logger.info(
+                    f'LOG ingestion: chunk {chunk_num} '
+                    f'| {total:,} registros inseridos'
+                )
+
+        logger.info(f'LOG ingestao concluida: {total:,} registros')
         return total
 
     except Exception as e:

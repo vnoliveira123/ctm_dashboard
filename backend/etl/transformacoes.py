@@ -1,19 +1,22 @@
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
+from sqlalchemy import func, case, text
 from api.db.models import Execucao, ProcessoStats, ExecucaoTimeline
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Status do LOG.csv
 _OK  = 'OK'
 _NOK = 'NOT OK'
 
 
 def agregar_processos(db: Session) -> int:
-    """Agrega execuções por processo e atualiza mat_processos_stats."""
+    """
+    Agrega execuções por processo e atualiza mat_processos_stats.
+    Usa bulk_insert/update_mappings em vez de UPSERT linha a linha.
+    """
     try:
+        # Agrega no banco (uma query GROUP BY)
         resultados = db.query(
             Execucao.tabela,
             Execucao.job,
@@ -25,39 +28,51 @@ def agregar_processos(db: Session) -> int:
             func.max(Execucao.fim).label('ultima_execucao'),
         ).group_by(Execucao.tabela, Execucao.job, Execucao.grupo).all()
 
-        contador = 0
+        # Pré-carregar chaves existentes (uma query)
+        existing: dict[tuple, int] = {
+            (s.tabela, s.job, s.grupo): s.id
+            for s in db.query(
+                ProcessoStats.tabela, ProcessoStats.job,
+                ProcessoStats.grupo,  ProcessoStats.id,
+            ).all()
+        }
+
+        insert_maps: list[dict] = []
+        update_maps: list[dict] = []
+        _now = datetime.utcnow()
+
         for r in resultados:
-            total   = r.total or 0
+            total   = r.total   or 0
             sucesso = r.sucesso or 0
             taxa    = (sucesso / total * 100) if total > 0 else 0.0
 
-            stat = db.query(ProcessoStats).filter(
-                ProcessoStats.tabela == r.tabela,
-                ProcessoStats.job    == r.job,
-                ProcessoStats.grupo  == r.grupo,
-            ).first()
+            campos = {
+                'total_execucoes':    total,
+                'execucoes_sucesso':  sucesso,
+                'execucoes_falha':    r.falha or 0,
+                'taxa_sucesso':       taxa,
+                'duracao_media':      float(r.duracao_media or 0.0),
+                'ultima_execucao':    r.ultima_execucao,
+                'data_atualizacao':   _now,
+            }
 
-            valores = dict(
-                total_execucoes=total,
-                execucoes_sucesso=sucesso,
-                execucoes_falha=r.falha or 0,
-                taxa_sucesso=taxa,
-                duracao_media=float(r.duracao_media or 0.0),
-                ultima_execucao=r.ultima_execucao,
-                data_atualizacao=datetime.utcnow(),
-            )
-
-            if stat:
-                for k, v in valores.items():
-                    setattr(stat, k, v)
+            key = (r.tabela, r.job, r.grupo)
+            if key in existing:
+                campos['id'] = existing[key]
+                update_maps.append(campos)
             else:
-                db.add(ProcessoStats(tabela=r.tabela, job=r.job, grupo=r.grupo, **valores))
+                campos.update(tabela=r.tabela, job=r.job, grupo=r.grupo)
+                insert_maps.append(campos)
 
-            contador += 1
+        if insert_maps:
+            db.bulk_insert_mappings(ProcessoStats, insert_maps)
+        if update_maps:
+            db.bulk_update_mappings(ProcessoStats, update_maps)
 
         db.commit()
-        logger.info(f'Stats de processos atualizados: {contador}')
-        return contador
+        total_upserted = len(insert_maps) + len(update_maps)
+        logger.info(f'Stats atualizados: {total_upserted:,}')
+        return total_upserted
 
     except Exception as e:
         logger.error(f'Erro ao agregar processos: {e}')
@@ -67,38 +82,37 @@ def agregar_processos(db: Session) -> int:
 
 def agregar_execucoes_timeline(db: Session) -> int:
     """
-    Popula mat_execucoes_timeline a partir de raw_execucoes.
-    Recria a tabela a cada execução do ETL para manter consistência.
+    Popula mat_execucoes_timeline via INSERT...SELECT puro no banco.
+    Evita carregar 58 M+ objetos ORM na memória Python.
     """
     try:
-        # Limpa e reinsere para manter idempotência
-        db.query(ExecucaoTimeline).delete()
-        db.flush()
+        # Truncate é instantâneo para tabelas grandes
+        db.execute(text('TRUNCATE TABLE mat_execucoes_timeline RESTART IDENTITY'))
 
-        execucoes = db.query(Execucao).filter(Execucao.inicio != None).all()
-
-        novos = [
-            ExecucaoTimeline(
-                tabela=e.tabela,
-                job=e.job,
-                grupo=e.grupo,
-                data_execucao=e.inicio,
-                status=e.status,
-                duracao_minutos=e.minutos_proc,
-                data_atualizacao=datetime.utcnow(),
-            )
-            for e in execucoes
-        ]
-
-        if novos:
-            # Insere em lotes de 1000
-            for i in range(0, len(novos), 1000):
-                db.bulk_save_objects(novos[i:i + 1000])
-                db.flush()
+        # INSERT...SELECT: PostgreSQL processa tudo server-side, sem tráfego Python
+        db.execute(text('''
+            INSERT INTO mat_execucoes_timeline
+                (tabela, job, grupo, data_execucao, status, duracao_minutos, data_atualizacao)
+            SELECT
+                tabela,
+                job,
+                grupo,
+                inicio        AS data_execucao,
+                status,
+                minutos_proc  AS duracao_minutos,
+                NOW()         AS data_atualizacao
+            FROM raw_execucoes
+            WHERE inicio IS NOT NULL
+        '''))
 
         db.commit()
-        logger.info(f'Timeline atualizada: {len(novos)} registros')
-        return len(novos)
+
+        count = db.execute(
+            text('SELECT COUNT(*) FROM mat_execucoes_timeline')
+        ).scalar() or 0
+
+        logger.info(f'Timeline atualizada: {count:,} registros')
+        return count
 
     except Exception as e:
         logger.error(f'Erro ao agregar timeline: {e}')

@@ -33,3 +33,6 @@ Thumbs.db
 # Project
 *.log
 .DS_Store
+
+# Arquivos de dados gerados (podem ser muito grandes)
+csv_input/LOG.csv
