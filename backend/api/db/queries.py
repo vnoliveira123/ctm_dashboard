@@ -13,6 +13,26 @@ _FLOW_IN_RE  = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})', re.IGNORECASE)
 # Detecta adição (+) de condição de fluxo real em OUT_COUNDS
 _FLOW_OUT_RE = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})\+', re.IGNORECASE)
 
+# Parsers de condições individuais (mesmo padrão de gerar_fluxos.py)
+_JBSTAT_RE    = re.compile(r'JBSTAT', re.IGNORECASE)
+_OUT_PARSE_RE = re.compile(r'(.+?(?:JOBNEXT|JB[A-Z0-9*]{4}))([+\-])', re.IGNORECASE)
+_IN_PARSE_RE  = re.compile(r'.+?(?:JOBNEXT|JB[A-Z0-9*]{4})',            re.IGNORECASE)
+
+
+def _jbodat_plus_conds(raw: str) -> list[str]:
+    """Condições não-JBSTAT com flag + em OUT_COUNDS (candidatas a terem destino)."""
+    if not raw:
+        return []
+    return [c.strip() for c, s in _OUT_PARSE_RE.findall(raw)
+            if s == '+' and not _JBSTAT_RE.search(c)]
+
+
+def _in_conds_list(raw: str) -> list[str]:
+    """Todas as condições individuais em IN_COUNDS."""
+    if not raw:
+        return []
+    return [m.strip() for m in _IN_PARSE_RE.findall(raw) if m.strip()]
+
 
 # ══════════════════════════════════════════════════════════════════
 # PROCESSOS
@@ -516,12 +536,8 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
 
     processos = q.all()
 
-    # 2. Calcular posição e filtrar por posicao se solicitado
+    # 2. Classificação inicial de posição por campos do próprio processo
     pos_map = {(p.tabela, p.job): _posicao_fluxo(p) for p in processos}
-    if posicao:
-        pos_map = {k: v for k, v in pos_map.items() if v == posicao}
-
-    filtered_keys = set(pos_map.keys())
 
     # 3. Carregar todos os fluxos e montar mapa de saídas por nó
     all_fluxos = db.query(Fluxo).all()
@@ -530,7 +546,29 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
         src = f"{f.tabela_origem}_{f.job_origem}"
         outgoing_map.setdefault(src, []).append((f.tabela_destino, f.job_destino))
 
-    # 4. Montar nós com status de controle
+    # 4. Reclassificar "meio" → "fim" quando TODAS as saídas vão para tabelas de controle
+    #    (job produtivo que só notifica scheduler — ex: envia JBODAT+ apenas para PA12)
+    for (tab, jb), pos in list(pos_map.items()):
+        if pos == 'meio':
+            node_id  = f"{tab}_{jb}"
+            outgoing = outgoing_map.get(node_id, [])
+            if outgoing and all(_CONTROL_RE.match(t) for t, _ in outgoing):
+                pos_map[(tab, jb)] = 'fim'
+
+    # 5. Filtrar por posicao se solicitado
+    if posicao:
+        pos_map = {k: v for k, v in pos_map.items() if v == posicao}
+
+    filtered_keys = set(pos_map.keys())
+
+    # 6. Conjunto global de condições consumidas em IN_COUNDS (para detectar órfãs)
+    all_in_rows = db.query(Processo.in_counds).filter(Processo.in_counds != None).all()
+    indice_in_global: set[str] = set()
+    for (raw,) in all_in_rows:
+        for cond in _in_conds_list(raw):
+            indice_in_global.add(cond)
+
+    # 7. Montar nós com status de controle e condições órfãs
     nodes = []
     for p in processos:
         if (p.tabela, p.job) not in filtered_keys:
@@ -544,11 +582,14 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
             outgoing      = outgoing_map.get(node_id, [])
             to_control    = [(t, j) for t, j in outgoing if _CONTROL_RE.match(t)]
             to_productive = [(t, j) for t, j in outgoing if not _CONTROL_RE.match(t)]
-            # Fim do fluxo produtivo: posicao==fim OU meio sem saídas para tabelas produtivas
             is_prod_fim   = (pos == 'fim') or (pos == 'meio' and not to_productive)
             if is_prod_fim:
                 controle_efetuado   = bool(to_control)
                 suscetivel_controle = not bool(to_control)
+
+        # Condições JBODAT+ que não aparecem em IN_COUNDS de nenhum job no banco
+        condicoes_orfas = [c for c in _jbodat_plus_conds(p.out_counds or '')
+                           if c not in indice_in_global]
 
         nodes.append({
             'id':                   node_id,
@@ -562,6 +603,7 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
             'out_counds':           p.out_counds or '',
             'controle_efetuado':    controle_efetuado,
             'suscetivel_controle':  suscetivel_controle,
+            'condicoes_orfas':      condicoes_orfas,
         })
 
     # 5. Filtrar por controle se solicitado

@@ -110,12 +110,21 @@ const NodeCard: React.FC<{ node: LayoutNode }> = ({ node }) => {
           <text x={x+NW-10} y={y+27} textAnchor="middle" fontSize={9} fontWeight="bold" fill="white" dy="0.35em">!</text>
         </g>
       )}
+      {/* Badge de condição órfã (âmbar) — canto superior direito do card */}
+      {node.condicoes_orfas.length > 0 && (
+        <g>
+          <circle cx={x+NW-3} cy={y+1} r={8} fill="#f57f17" stroke="white" strokeWidth={1.5} />
+          <text x={x+NW-3} y={y+1} textAnchor="middle" fontSize={8} fontWeight="bold" fill="white" dy="0.35em">
+            {node.condicoes_orfas.length}
+          </text>
+        </g>
+      )}
       {/* Strip inferior com nome da tabela */}
       <rect x={x+2} y={y+NH-SH-2} width={NW-4} height={SH} rx={3} fill="#e64a19" opacity={0.9} />
       <text x={node.x} y={y+NH-SH+8} textAnchor="middle" fontSize={9} fill="white" fontWeight={600} dy="0.2em">
         {trunc(node.tabela, 18)}
       </text>
-      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}${node.controle_efetuado ? '\n✅ Controle efetuado' : ''}${node.suscetivel_controle ? '\n⚠️ Suscetível a controle' : ''}`}</title>
+      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}${node.controle_efetuado ? '\n✅ Controle efetuado' : ''}${node.suscetivel_controle ? '\n⚠️ Suscetível a controle' : ''}${node.condicoes_orfas.length > 0 ? `\n🔶 ${node.condicoes_orfas.length} condição(ões) sem destino:\n  ${node.condicoes_orfas.join('\n  ')}` : ''}`}</title>
     </g>
   );
 };
@@ -140,6 +149,10 @@ const Legenda: React.FC = () => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
       <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#e65100' }} />
       <Typography variant="caption" fontWeight={600}>Suscetível a controle</Typography>
+    </Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#f57f17' }} />
+      <Typography variant="caption" fontWeight={600}>Condição sem destino</Typography>
     </Box>
   </Box>
 );
@@ -235,12 +248,26 @@ const TabelaJobs: React.FC<{ nodes: GrafoNode[] }> = ({ nodes }) => {
                 </TableCell>
                 <TableCell sx={{ maxWidth: 220, overflow: 'hidden' }}>
                   {n.out_counds ? (
-                    <Tooltip title={n.out_counds} placement="top" arrow>
-                      <Typography variant="caption" fontFamily="monospace"
-                                  sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help', color: '#b71c1c' }}>
-                        {n.out_counds}
-                      </Typography>
-                    </Tooltip>
+                    <>
+                      <Tooltip title={n.out_counds} placement="top" arrow>
+                        <Typography variant="caption" fontFamily="monospace"
+                                    sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap', cursor: 'help',
+                                          color: n.condicoes_orfas.length > 0 ? '#f57f17' : '#b71c1c' }}>
+                          {n.out_counds}
+                        </Typography>
+                      </Tooltip>
+                      {n.condicoes_orfas.length > 0 && (
+                        <Tooltip
+                          title={`Condições sem destino:\n${n.condicoes_orfas.join('\n')}`}
+                          placement="bottom" arrow>
+                          <Chip size="small"
+                                label={`${n.condicoes_orfas.length} órfã${n.condicoes_orfas.length > 1 ? 's' : ''}`}
+                                sx={{ bgcolor: '#f57f17', color: 'white', fontSize: 10,
+                                      height: 18, cursor: 'help', mt: 0.3 }} />
+                        </Tooltip>
+                      )}
+                    </>
                   ) : <Typography variant="caption" color="text.disabled">—</Typography>}
                 </TableCell>
                 <TableCell><PosChip posicao={n.posicao} /></TableCell>

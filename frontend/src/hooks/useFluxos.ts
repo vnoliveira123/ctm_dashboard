@@ -26,6 +26,7 @@ export interface GrafoNode {
   out_counds:           string;
   controle_efetuado:    boolean;
   suscetivel_controle:  boolean;
+  condicoes_orfas:      string[];
 }
 
 export interface GrafoEdge {
