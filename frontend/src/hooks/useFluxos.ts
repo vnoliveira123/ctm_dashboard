@@ -11,15 +11,18 @@ export interface FiltrosFluxo {
   posicao?:       string;
   carga?:         string;
   horario_carga?: string;
+  controle?:      string;
 }
 
 export interface GrafoNode {
-  id:      string;
-  label:   string;
-  grupo:   string;
-  tabela:  string;
-  posicao: 'inicio' | 'meio' | 'fim';
-  carga:   string;
+  id:                   string;
+  label:                string;
+  grupo:                string;
+  tabela:               string;
+  posicao:              'inicio' | 'meio' | 'fim';
+  carga:                string;
+  controle_efetuado:    boolean;
+  suscetivel_controle:  boolean;
 }
 
 export interface GrafoEdge {
@@ -46,6 +49,7 @@ export const useFluxosGrafo = (filtros: FiltrosFluxo = {}, enabled = true) => {
       if (filtros.posicao)       p.append('posicao',       filtros.posicao);
       if (filtros.carga)         p.append('carga',         filtros.carga);
       if (filtros.horario_carga) p.append('horario_carga', filtros.horario_carga);
+      if (filtros.controle)      p.append('controle',      filtros.controle);
       const { data } = await axios.get<Grafo>(`${API_URL}/api/fluxos/grafo?${p}`);
       return data;
     },

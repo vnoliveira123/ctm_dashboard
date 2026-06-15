@@ -22,6 +22,7 @@ async def obter_grafo_fluxos(
     posicao:       Optional[str] = Query(None),
     carga:         Optional[str] = Query(None),
     horario_carga: Optional[str] = Query(None),
+    controle:      Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Retorna nós e arestas para o grafo de fluxo, com filtros."""
@@ -29,5 +30,5 @@ async def obter_grafo_fluxos(
         db,
         grupo=grupo, tabela=tabela, job=job,
         rotina=rotina, posicao=posicao, carga=carga,
-        horario_carga=horario_carga,
+        horario_carga=horario_carga, controle=controle,
     )

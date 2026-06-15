@@ -14,7 +14,7 @@ const NW = 144;   // node width
 const NH = 58;    // node height
 const GRUPOS   = ['PR12', 'PR21', 'PR31', 'PR41'];
 const HORARIOS = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
-const FILTROS_VAZIOS: FiltrosFluxo = { grupo: '', tabela: '', job: '', rotina: '', posicao: '', carga: '', horario_carga: '' };
+const FILTROS_VAZIOS: FiltrosFluxo = { grupo: '', tabela: '', job: '', rotina: '', posicao: '', carga: '', horario_carga: '', controle: '' };
 
 const COR: Record<string, string> = {
   inicio: '#2e7d32',
@@ -93,12 +93,27 @@ const NodeCard: React.FC<{ node: LayoutNode }> = ({ node }) => {
       {node.carga === 'SIM' && (
         <circle cx={x+NW-10} cy={y+10} r={5} fill="#ff8f00" stroke="white" strokeWidth={1.5} />
       )}
+      {/* Dot de controle efetuado (verde) */}
+      {node.controle_efetuado && (
+        <g>
+          <circle cx={x+NW-10} cy={y+27} r={6} fill="#2e7d32" stroke="white" strokeWidth={1.5} />
+          <path d={`M${x+NW-13} ${y+27}L${x+NW-10.5} ${y+30}L${x+NW-7} ${y+24}`}
+                stroke="white" strokeWidth={1.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      )}
+      {/* Dot de suscetível a controle (laranja-escuro) */}
+      {node.suscetivel_controle && (
+        <g>
+          <circle cx={x+NW-10} cy={y+27} r={6} fill="#e65100" stroke="white" strokeWidth={1.5} />
+          <text x={x+NW-10} y={y+27} textAnchor="middle" fontSize={9} fontWeight="bold" fill="white" dy="0.35em">!</text>
+        </g>
+      )}
       {/* Strip inferior com nome da tabela */}
       <rect x={x+2} y={y+NH-SH-2} width={NW-4} height={SH} rx={3} fill="#e64a19" opacity={0.9} />
       <text x={node.x} y={y+NH-SH+8} textAnchor="middle" fontSize={9} fill="white" fontWeight={600} dy="0.2em">
         {trunc(node.tabela, 18)}
       </text>
-      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}`}</title>
+      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}${node.controle_efetuado ? '\n✅ Controle efetuado' : ''}${node.suscetivel_controle ? '\n⚠️ Suscetível a controle' : ''}`}</title>
     </g>
   );
 };
@@ -115,6 +130,14 @@ const Legenda: React.FC = () => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
       <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ff8f00' }} />
       <Typography variant="caption" fontWeight={600}>Carga automática</Typography>
+    </Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2e7d32' }} />
+      <Typography variant="caption" fontWeight={600}>Controle efetuado</Typography>
+    </Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#e65100' }} />
+      <Typography variant="caption" fontWeight={600}>Suscetível a controle</Typography>
     </Box>
   </Box>
 );
@@ -263,6 +286,25 @@ export const Tela3Fluxos: React.FC = () => {
                   </Select>
                 </FormControl>
               )}
+              <FormControl size="small" sx={{ minWidth: 175 }}>
+                <InputLabel>Controle</InputLabel>
+                <Select value={filtros.controle} label="Controle"
+                        onChange={e => set('controle')(e.target.value as string)}>
+                  <MenuItem value=""><em>Todos</em></MenuItem>
+                  <MenuItem value="efetuado">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#2e7d32' }} />
+                      Controle efetuado
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="suscetivel">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#e65100' }} />
+                      Suscetível a controle
+                    </Box>
+                  </MenuItem>
+                </Select>
+              </FormControl>
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button variant="contained" size="small" onClick={aplicar}>Aplicar Filtros</Button>

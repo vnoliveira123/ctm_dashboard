@@ -1,8 +1,12 @@
+import re
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, case, or_, and_, extract
 from api.db.models import Processo, Execucao, Fluxo, ProcessoStats, ExecucaoTimeline
 from datetime import datetime, timedelta
 from typing import Optional, List
+
+# Tabelas de controle: 2 letras + 2 dígitos no início (ex: PA12, PM11, PR21)
+_CONTROL_RE = re.compile(r'^[A-Za-z]{2}\d{2}')
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -483,7 +487,8 @@ def get_rotinas_processos(db: Session) -> List[str]:
 
 
 def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
-                     rotina=None, posicao=None, carga=None, horario_carga=None):
+                     rotina=None, posicao=None, carga=None, horario_carga=None,
+                     controle=None):
     # 1. Filtrar processos
     q = db.query(Processo)
     if grupo:
@@ -501,40 +506,70 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
 
     processos = q.all()
 
-    # 2. Calcular posição e filtrar se necessário
+    # 2. Calcular posição e filtrar por posicao se solicitado
     pos_map = {(p.tabela, p.job): _posicao_fluxo(p) for p in processos}
     if posicao:
         pos_map = {k: v for k, v in pos_map.items() if v == posicao}
 
     filtered_keys = set(pos_map.keys())
 
-    # 3. Montar nós
-    nodes = [
-        {
-            'id':      f"{p.tabela}_{p.job}",
-            'label':   p.job,
-            'grupo':   p.grupo,
-            'tabela':  p.tabela,
-            'posicao': pos_map[(p.tabela, p.job)],
-            'carga':   p.carga or '',
-        }
-        for p in processos if (p.tabela, p.job) in filtered_keys
-    ]
+    # 3. Carregar todos os fluxos e montar mapa de saídas por nó
+    all_fluxos = db.query(Fluxo).all()
+    outgoing_map: dict[str, list[tuple[str, str]]] = {}
+    for f in all_fluxos:
+        src = f"{f.tabela_origem}_{f.job_origem}"
+        outgoing_map.setdefault(src, []).append((f.tabela_destino, f.job_destino))
+
+    # 4. Montar nós com status de controle
+    nodes = []
+    for p in processos:
+        if (p.tabela, p.job) not in filtered_keys:
+            continue
+        node_id = f"{p.tabela}_{p.job}"
+        pos     = pos_map[(p.tabela, p.job)]
+
+        controle_efetuado   = False
+        suscetivel_controle = False
+        if p.carga == 'SIM':
+            outgoing      = outgoing_map.get(node_id, [])
+            to_control    = [(t, j) for t, j in outgoing if _CONTROL_RE.match(t)]
+            to_productive = [(t, j) for t, j in outgoing if not _CONTROL_RE.match(t)]
+            # Fim do fluxo produtivo: posicao==fim OU meio sem saídas para tabelas produtivas
+            is_prod_fim   = (pos == 'fim') or (pos == 'meio' and not to_productive)
+            if is_prod_fim:
+                controle_efetuado   = bool(to_control)
+                suscetivel_controle = not bool(to_control)
+
+        nodes.append({
+            'id':                   node_id,
+            'label':                p.job,
+            'grupo':                p.grupo,
+            'tabela':               p.tabela,
+            'posicao':              pos,
+            'carga':                p.carga or '',
+            'controle_efetuado':    controle_efetuado,
+            'suscetivel_controle':  suscetivel_controle,
+        })
+
+    # 5. Filtrar por controle se solicitado
+    if controle == 'efetuado':
+        nodes = [n for n in nodes if n['controle_efetuado']]
+    elif controle == 'suscetivel':
+        nodes = [n for n in nodes if n['suscetivel_controle']]
 
     if not nodes:
         return {'nodes': [], 'edges': []}
 
     node_ids = {n['id'] for n in nodes}
 
-    # 4. Arestas entre nós filtrados
-    fluxos = db.query(Fluxo).all()
+    # 6. Arestas entre nós do conjunto filtrado
     edges = [
         {
             'source':   f"{f.tabela_origem}_{f.job_origem}",
             'target':   f"{f.tabela_destino}_{f.job_destino}",
             'condicao': f.condicao or '',
         }
-        for f in fluxos
+        for f in all_fluxos
         if f"{f.tabela_origem}_{f.job_origem}" in node_ids
         and f"{f.tabela_destino}_{f.job_destino}" in node_ids
     ]
