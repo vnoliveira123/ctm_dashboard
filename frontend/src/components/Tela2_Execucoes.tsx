@@ -123,32 +123,42 @@ const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
 const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
   const total = ok + nok;
   if (!total) return <SemDados />;
-  const R = 80, RI = 48, SZ = 220;
+  const R = 80, RI = 48, CX = 140, CY = 100, VW = 560, VH = 230;
   const pieData = d3.pie<{ label: string; value: number; color: string }>().value(d => d.value)([
     { label: 'OK',     value: ok,  color: '#4caf50' },
     { label: 'NOT OK', value: nok, color: '#f44336' },
   ]);
-  const arc     = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(RI).outerRadius(R);
-  const arcLbl  = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
+  const arc    = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(RI).outerRadius(R);
+  const arcLbl = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
   return (
-    <svg viewBox={`${-SZ / 2} ${-SZ / 2} ${SZ} ${SZ}`} width={SZ} height={SZ}>
-      {pieData.map((s, i) => (
-        <g key={i}>
-          <path d={arc(s) || ''} fill={s.data.color} />
-          {s.data.value / total > 0.05 && (
-            <text transform={`translate(${arcLbl.centroid(s)})`} textAnchor="middle"
-                  dy="0.35em" fontSize={12} fill="white" fontWeight="bold">
-              {Math.round(s.data.value / total * 100)}%
-            </text>
-          )}
-        </g>
-      ))}
-      <text textAnchor="middle" dy="-0.3em" fontSize={16} fontWeight="bold" fill="#333">
-        {total.toLocaleString('pt-BR')}
-      </text>
-      <text textAnchor="middle" dy="1.1em" fontSize={10} fill="#999">execuções</text>
-      <text x={-R - 10} y={R + 20} fontSize={10} fill="#4caf50">■ OK: {ok.toLocaleString('pt-BR')}</text>
-      <text x={20}      y={R + 20} fontSize={10} fill="#f44336">■ NOT OK: {nok.toLocaleString('pt-BR')}</text>
+    <svg viewBox={`0 0 ${VW} ${VH}`} width="100%">
+      <g transform={`translate(${CX},${CY})`}>
+        {pieData.map((s, i) => (
+          <g key={i}>
+            <path d={arc(s) || ''} fill={s.data.color} />
+            {s.data.value / total > 0.05 && (
+              <text transform={`translate(${arcLbl.centroid(s)})`} textAnchor="middle"
+                    dy="0.35em" fontSize={12} fill="white" fontWeight="bold">
+                {Math.round(s.data.value / total * 100)}%
+              </text>
+            )}
+          </g>
+        ))}
+        <text textAnchor="middle" dy="-0.3em" fontSize={16} fontWeight="bold" fill="#333">
+          {total.toLocaleString('pt-BR')}
+        </text>
+        <text textAnchor="middle" dy="1.1em" fontSize={10} fill="#999">execuções</text>
+      </g>
+      {/* Legenda lateral */}
+      <g transform={`translate(${CX + R + 24}, ${CY - 30})`}>
+        {[{ color: '#4caf50', label: 'OK', value: ok }, { color: '#f44336', label: 'NOT OK', value: nok }].map((it, i) => (
+          <g key={it.label} transform={`translate(0,${i * 36})`}>
+            <rect width={14} height={14} rx={3} fill={it.color} />
+            <text x={20} y={11} fontSize={12} fill="#555" fontWeight="bold">{it.label}</text>
+            <text x={20} y={26} fontSize={11} fill="#888">{it.value.toLocaleString('pt-BR')}</text>
+          </g>
+        ))}
+      </g>
     </svg>
   );
 };
@@ -419,18 +429,16 @@ export const Tela2Execucoes: React.FC = () => {
         <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={220} />
       </ChartCard>
 
-      {/* Gráficos — grid 2 colunas */}
+      {/* Gráficos — grid 2 colunas uniformes */}
       <Grid container spacing={2} sx={{ mt: 2, mb: 3 }}>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={6}>
           <ChartCard title="Volume de Execuções por Data">
             <GraficoVolumeDiario data={graficos?.volume_por_data ?? []} />
           </ChartCard>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={6}>
           <ChartCard title="Status: OK vs NOT OK">
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
-            </Box>
+            <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
           </ChartCard>
         </Grid>
         <Grid item xs={12} md={6}>

@@ -223,6 +223,8 @@ export const Tela1Processos: React.FC = () => {
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosProcesso>(FILTROS_VAZIOS);
   const [page, setPage]                   = useState(1);
   const [expandido, setExpandido]         = useState(true);
+  const [exibirSemExec, setExibirSemExec]   = useState(false);
+  const [exibirAlertasNP, setExibirAlertasNP] = useState(false);
 
   const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
@@ -390,73 +392,99 @@ export const Tela1Processos: React.FC = () => {
 
       {/* ── Jobs Sem Execução ── */}
       {semExec && semExec.jobs.length > 0 && (
-        <Paper variant="outlined" sx={{ mb: 3, p: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-            Jobs Sem Execução (CTM × LOG) — {semExec.total} encontrado{semExec.total !== 1 ? 's' : ''}
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
-                  {['Tabela', 'Job', 'Grupo', 'Periodicidade', 'Carga'].map(c => (
-                    <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {semExec.jobs.map((j: JobSemExecucao, i: number) => (
-                  <TableRow key={i} hover>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.tabela}</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.job}</TableCell>
-                    <TableCell>
-                      <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" color="default" />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.78rem' }}>{j.periodicidade ?? '-'}</TableCell>
-                    <TableCell>
-                      {j.carga === 'SIM'
-                        ? <Chip label="Sim" size="small" color="success" />
-                        : <Chip label="Não" size="small" variant="outlined" />}
-                    </TableCell>
+        <Paper variant="outlined" sx={{ mb: 2 }}>
+          <Box
+            sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+            onClick={() => setExibirSemExec(v => !v)}
+          >
+            <PowerOffIcon fontSize="small" color="action" />
+            <Typography variant="subtitle2" fontWeight={600}>
+              Jobs Sem Execução (CTM × LOG)
+            </Typography>
+            <Chip label={semExec.total} size="small" sx={{ ml: 0.5 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+              {exibirSemExec ? 'Recolher ▲' : 'Expandir ▼'}
+            </Typography>
+          </Box>
+          <Collapse in={exibirSemExec}>
+            <Divider />
+            <TableContainer sx={{ p: 0 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.100' }}>
+                    {['Tabela', 'Job', 'Grupo', 'Periodicidade', 'Carga'].map(c => (
+                      <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {semExec.jobs.map((j: JobSemExecucao, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.tabela}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.job}</TableCell>
+                      <TableCell>
+                        <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" color="default" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.78rem' }}>{j.periodicidade ?? '-'}</TableCell>
+                      <TableCell>
+                        {j.carga === 'SIM'
+                          ? <Chip label="Sim" size="small" color="success" />
+                          : <Chip label="Não" size="small" variant="outlined" />}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Collapse>
         </Paper>
       )}
 
       {/* ── Alertas Não Padronizados ── */}
       {alertasNP && alertasNP.alertas.length > 0 && (
-        <Paper variant="outlined" sx={{ mb: 3, p: 2 }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-            Alertas Não Padronizados (tipo_alerta ≠ U-ECS) — {alertasNP.alertas.length} job{alertasNP.alertas.length !== 1 ? 's' : ''}
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'error.light' }}>
-                  {['Tabela', 'Job', 'Grupo', 'Tipo Alerta', 'Execuções'].map(c => (
-                    <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {alertasNP.alertas.map((a: AlertaNaoPadrao, i: number) => (
-                  <TableRow key={i} hover>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.tabela}</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.job}</TableCell>
-                    <TableCell>
-                      <Chip label={a.grupo?.split('-')[0] ?? a.grupo} size="small" variant="outlined" color="default" />
-                    </TableCell>
-                    <TableCell>
-                      <Chip label={a.tipo_alerta} size="small" color="error" />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.78rem' }}>{a.total_exec.toLocaleString('pt-BR')}</TableCell>
+        <Paper variant="outlined" sx={{ mb: 3 }}>
+          <Box
+            sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+            onClick={() => setExibirAlertasNP(v => !v)}
+          >
+            <NotificationsActiveIcon fontSize="small" color="error" />
+            <Typography variant="subtitle2" fontWeight={600}>
+              Alertas Não Padronizados (tipo_alerta ≠ U-ECS)
+            </Typography>
+            <Chip label={alertasNP.alertas.length} size="small" color="error" sx={{ ml: 0.5 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+              {exibirAlertasNP ? 'Recolher ▲' : 'Expandir ▼'}
+            </Typography>
+          </Box>
+          <Collapse in={exibirAlertasNP}>
+            <Divider />
+            <TableContainer sx={{ p: 0 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'error.light' }}>
+                    {['Tabela', 'Job', 'Grupo', 'Tipo Alerta', 'Execuções'].map(c => (
+                      <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {alertasNP.alertas.map((a: AlertaNaoPadrao, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.tabela}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.job}</TableCell>
+                      <TableCell>
+                        <Chip label={a.grupo?.split('-')[0] ?? a.grupo} size="small" variant="outlined" color="default" />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={a.tipo_alerta} size="small" color="error" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.78rem' }}>{a.total_exec.toLocaleString('pt-BR')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Collapse>
         </Paper>
       )}
 
