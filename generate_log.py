@@ -1,152 +1,96 @@
+"""
+Gerador de LOG sintético — cenário produtivo
+  Período  : 01/01/2026 a 30/06/2026  (181 dias corridos)
+  Jobs      : lidos de CTM.csv  (todos DIARIO, 7 dias/semana)
+  Volume    : ~58.000.386 linhas
+  Estimativa: 136.978 jobs × 181 dias × E[n_exec=2,34] = 58.015.662
+
+Grava em modo streaming (sem buffer em memória) → uso de RAM ~100 MB.
+Tempo estimado: 15–30 min dependendo do disco.
+"""
 import csv
 import random
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from collections import defaultdict
 
 random.seed(99)
 
 CTM_PATH = Path(__file__).parent / 'csv_input' / 'CTM.csv'
-LOG_PATH = Path(__file__).parent / 'csv_input' / 'LOG.csv'
+LOG_PATH  = Path(__file__).parent / 'csv_input' / 'LOG.csv'
 
-# Período de geração: 7 meses (01/11/2025 a 14/06/2026)
-START_DATE = datetime(2025, 11, 1)
-END_DATE   = datetime(2026, 6, 14)
+# Período: 01/01/2026 a 30/06/2026
+START_DATE = datetime(2026, 1, 1)
+END_DATE   = datetime(2026, 6, 30)
+TOTAL_DAYS = (END_DATE - START_DATE).days + 1   # 181
 
-FIELDNAMES = ['TABELA', 'JOB', 'GRUPO', 'INICIO', 'FIM', 'STATUS', 'HORA_PROC', 'MINUTOS_PROC', 'EXECUCOES']
-
-
-# ── Datas de execução por periodicidade ─────────────────────────────────────
-
-def datas_de_execucao(periodicidade: str) -> list[datetime]:
-    datas = []
-    cur = START_DATE
-    p = (periodicidade or 'DIARIO').upper()
-
-    if p in ('DIARIO', 'DAILY'):
-        while cur <= END_DATE:
-            if cur.weekday() < 5:          # seg–sex
-                datas.append(cur)
-            cur += timedelta(days=1)
-
-    elif p in ('SEMANAL', 'WEEKLY'):
-        # toda segunda-feira
-        while cur.weekday() != 0:
-            cur += timedelta(days=1)
-        while cur <= END_DATE:
-            datas.append(cur)
-            cur += timedelta(weeks=1)
-
-    elif p in ('MENSAL', 'MONTHLY'):
-        # dia 1 de cada mês (ou mais próximo dia útil)
-        cur = START_DATE.replace(day=1)
-        while cur <= END_DATE:
-            datas.append(cur)
-            m = cur.month + 1 if cur.month < 12 else 1
-            y = cur.year if cur.month < 12 else cur.year + 1
-            cur = cur.replace(year=y, month=m, day=1)
-
-    elif p == 'TRIMESTRAL':
-        for year in (2025, 2026):
-            for month in (1, 4, 7, 10):
-                d = datetime(year, month, 15)
-                if START_DATE <= d <= END_DATE:
-                    datas.append(d)
-
-    elif p == 'SEMESTRAL':
-        for year in (2025, 2026):
-            for month in (1, 7):
-                d = datetime(year, month, 15)
-                if START_DATE <= d <= END_DATE:
-                    datas.append(d)
-
-    elif p == 'ANUAL':
-        d = datetime(2026, 1, 15)
-        if START_DATE <= d <= END_DATE:
-            datas.append(d)
-
-    else:   # A PEDIDO e outros
-        total = (END_DATE - START_DATE).days
-        for _ in range(random.randint(8, 20)):
-            datas.append(START_DATE + timedelta(days=random.randint(0, total)))
-        datas.sort()
-
-    return datas
+FIELDNAMES = [
+    'TABELA', 'JOB', 'GRUPO',
+    'INICIO', 'FIM', 'STATUS',
+    'HORA_PROC', 'MINUTOS_PROC', 'EXECUCOES',
+]
 
 
-# ── Helpers de formatação ────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fmt(dt: datetime) -> str:
-    """hh:mm - dd/mm/yy"""
     return dt.strftime('%H:%M - %d/%m/%y')
 
 def hora_proc(delta: timedelta) -> str:
-    """hh:mm  (total em horas e minutos)"""
     tot = int(delta.total_seconds())
     return f'{tot // 3600:02d}:{(tot % 3600) // 60:02d}'
 
 def minutos_proc(delta: timedelta) -> str:
-    """mm:ss  (total em minutos e segundos)"""
     tot = int(delta.total_seconds())
     return f'{tot // 60:02d}:{tot % 60:02d}'
 
-def parse_horario(fromtime: str, horario_carga: str) -> tuple[int, int]:
-    """Retorna (hora, minuto) de início esperado do job."""
-    if fromtime:
+def parse_horario(row: dict) -> tuple[int, int]:
+    ft = row.get('FROMTIME', '')
+    if ft:
         try:
-            h, m = fromtime.split(':')
+            h, m = ft.split(':')
             return int(h), int(m)
         except Exception:
             pass
     try:
-        return int(str(horario_carga).strip()), 0
+        return int(str(row.get('HORARIO_CARGA', '07')).strip()), 0
     except Exception:
         return 7, 0
 
-def dia_operacional(dt: datetime) -> datetime:
-    """Virada às 07h: retorna o início do dia operacional ao qual dt pertence."""
-    corte = dt.replace(hour=7, minute=0, second=0, microsecond=0)
-    return corte if dt >= corte else corte - timedelta(days=1)
 
+# Pesos de n_exec → E[n] = 0.26×1 + 0.30×2 + 0.28×3 + 0.16×4 = 2.34
+_N_EXEC_POPULATION = [1, 2, 3, 4]
+_N_EXEC_WEIGHTS    = [26, 30, 28, 16]
 
-# ── Geração de execuções ─────────────────────────────────────────────────────
+# Pesos de duração: concentrado entre 3–15 min, cauda até 90 min
+_DUR_POPULATION = list(range(1, 91))
+_DUR_WEIGHTS    = [max(1, 25 - abs(i - 6)) for i in range(1, 91)]
+
 
 def gerar_execucoes(row: dict, data_base: datetime) -> list[dict]:
-    """
-    Gera 1–3 registros de execução para um job em uma data operacional.
-    EXECUCOES é preenchido com o total de corridas naquele dia operacional.
-    """
-    tabela = row['TABELA']
-    job    = row['JOB']
-    grupo  = row['GRUPO']
+    tabela   = row['TABELA']
+    job      = row['JOB']
+    grupo    = row['GRUPO']
+    base_h, base_m = parse_horario(row)
 
-    base_h, base_m = parse_horario(row.get('FROMTIME', ''), row.get('HORARIO_CARGA', '07'))
+    jitter  = timedelta(minutes=random.randint(-20, 20))
+    inicio  = data_base.replace(hour=base_h, minute=base_m, second=0) + jitter
 
-    # Variação de ±20 minutos no horário de início
-    jitter = timedelta(minutes=random.randint(-20, 20))
-    inicio = data_base.replace(hour=base_h, minute=base_m, second=0) + jitter
-
-    # Duração: distribuição realista (maioria 1–15 min, alguns até 90 min)
-    dur_min = int(random.choices(
-        population=list(range(1, 91)),
-        weights=[max(1, 25 - abs(i - 6)) for i in range(1, 91)]
-    )[0])
+    dur_min = random.choices(_DUR_POPULATION, weights=_DUR_WEIGHTS)[0]
     dur_sec = random.randint(0, 59)
+    n_exec  = random.choices(_N_EXEC_POPULATION, weights=_N_EXEC_WEIGHTS)[0]
 
-    # Número de execuções no dia operacional (reprocessamentos são raros)
-    n_exec = random.choices([1, 2, 3], weights=[85, 12, 3])[0]
-
-    registros = []
-    cur_inicio = inicio
+    registros   = []
+    cur_inicio  = inicio
     for run in range(n_exec):
-        delta = timedelta(minutes=dur_min + random.randint(-1, 3), seconds=dur_sec)
+        delta = timedelta(
+            minutes=dur_min + random.randint(-1, 3),
+            seconds=dur_sec,
+        )
         if delta.total_seconds() < 60:
             delta = timedelta(minutes=1)
         cur_fim = cur_inicio + delta
-
-        # 1ª execução: 88% OK; reruns: maioria OK (já é reprocessamento)
-        prob_ok = 0.88 if run == 0 else 0.92
-        status = 'OK' if random.random() < prob_ok else 'NOT OK'
+        status  = 'OK' if random.random() < (0.88 if run == 0 else 0.92) else 'NOT OK'
 
         registros.append({
             'TABELA':       tabela,
@@ -159,48 +103,64 @@ def gerar_execucoes(row: dict, data_base: datetime) -> list[dict]:
             'MINUTOS_PROC': minutos_proc(delta),
             'EXECUCOES':    n_exec,
         })
-
-        # Próxima execução começa 10–40 min após o fim da anterior
         cur_inicio = cur_fim + timedelta(minutes=random.randint(10, 40))
 
     return registros
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 with open(CTM_PATH, encoding='utf-8', newline='') as f:
     jobs = list(csv.DictReader(f, delimiter='|'))
 
-print(f'Lendo {len(jobs)} jobs do CTM...')
+n_jobs = len(jobs)
+print(f'CTM carregado: {n_jobs:,} jobs')
+print(f'Periodo      : {START_DATE:%d/%m/%Y} - {END_DATE:%d/%m/%Y}  ({TOTAL_DAYS} dias)')
+print(f'Volume alvo  : ~58.000.386 linhas  (E[n_exec]=2,34 x {n_jobs:,} x {TOTAL_DAYS} dias)')
+print(f'Arquivo saída: {LOG_PATH}')
+print()
 
-all_records = []
-for job in jobs:
-    per = job.get('PERIODICIDADE', 'DIARIO')
-    for data in datas_de_execucao(per):
-        all_records.extend(gerar_execucoes(job, data))
-
-# Ordenar por INICIO (campo texto – converte para comparação)
-def sort_key(r):
-    try:
-        return datetime.strptime(r['INICIO'], '%H:%M - %d/%m/%y')
-    except Exception:
-        return datetime.min
-
-all_records.sort(key=sort_key)
+total_written = 0
+t0 = time.time()
 
 with open(LOG_PATH, 'w', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=FIELDNAMES, delimiter='|')
     writer.writeheader()
-    writer.writerows(all_records)
 
-# Estatísticas
-ok  = sum(1 for r in all_records if r['STATUS'] == 'OK')
-nok = sum(1 for r in all_records if r['STATUS'] == 'NOT OK')
-re_ = sum(1 for r in all_records if r['EXECUCOES'] > 1)
-jobs_unicos = len({(r['TABELA'], r['JOB']) for r in all_records})
+    cur_date = START_DATE
+    day_num  = 0
 
-print(f'Gerado: {len(all_records):,} registros')
-print(f'  OK: {ok:,}  |  NOT OK: {nok:,}  |  Taxa OK: {ok/len(all_records)*100:.1f}%')
-print(f'  Reprocessamentos (EXECUCOES > 1): {re_:,}')
-print(f'  Jobs únicos: {jobs_unicos}')
-print(f'  Arquivo: {LOG_PATH}')
+    while cur_date <= END_DATE:
+        day_num += 1
+
+        for job in jobs:
+            records = gerar_execucoes(job, cur_date)
+            writer.writerows(records)
+            total_written += len(records)
+
+        # Progresso a cada 15 dias ou no último dia
+        if day_num % 15 == 0 or cur_date == END_DATE:
+            elapsed = time.time() - t0
+            pct     = day_num / TOTAL_DAYS
+            eta_s   = (elapsed / pct) * (1 - pct) if pct > 0 else 0
+            eta_min = eta_s / 60
+            mb_written = total_written * 100 / 1_048_576   # estimativa ~100 bytes/linha
+            print(
+                f'[{pct*100:5.1f}%]  {cur_date:%d/%m/%Y}'
+                f'  |  {total_written:>14,} linhas'
+                f'  |  ~{mb_written:,.0f} MB'
+                f'  |  ETA ~{eta_min:.0f} min'
+            )
+
+        cur_date += timedelta(days=1)
+
+elapsed_total = time.time() - t0
+ok_rate_approx = 88.0  # percentual aproximado
+
+print()
+print('=' * 54)
+print(f'Concluído em {elapsed_total/60:.1f} min')
+print(f'Total de linhas : {total_written:,}')
+print(f'Taxa OK estimada: ~{ok_rate_approx:.0f}%')
+print(f'Arquivo         : {LOG_PATH}')
+print(f'Tamanho estimado: ~{total_written * 100 / 1_073_741_824:.1f} GB')
