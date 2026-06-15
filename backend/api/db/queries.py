@@ -11,12 +11,14 @@ _CONTROL_RE = re.compile(r'^[A-Za-z]{2}\d{2}')
 # Detecta datecode de fluxo REAL em IN_COUNDS (qualquer JB???/JOBNEXT exceto JBSTAT)
 _FLOW_IN_RE  = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})', re.IGNORECASE)
 # Detecta adição (+) de condição de fluxo real em OUT_COUNDS
-_FLOW_OUT_RE = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})\+', re.IGNORECASE)
+# \s* tolera espaço antes do flag (formato produção: "JBODAT +")
+_FLOW_OUT_RE = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})\s*\+', re.IGNORECASE)
 
 # Parsers de condições individuais (mesmo padrão de gerar_fluxos.py)
+# re.DOTALL: condições podem estar em linhas separadas em campos CSV multiline
 _JBSTAT_RE    = re.compile(r'JBSTAT', re.IGNORECASE)
-_OUT_PARSE_RE = re.compile(r'(.+?(?:JOBNEXT|JB[A-Z0-9*]{4}))([+\-])', re.IGNORECASE)
-_IN_PARSE_RE  = re.compile(r'.+?(?:JOBNEXT|JB[A-Z0-9*]{4})',            re.IGNORECASE)
+_OUT_PARSE_RE = re.compile(r'(.+?(?:JOBNEXT|JB[A-Z0-9*]{4}))\s*([+\-])', re.IGNORECASE | re.DOTALL)
+_IN_PARSE_RE  = re.compile(r'.+?(?:JOBNEXT|JB[A-Z0-9*]{4})',              re.IGNORECASE | re.DOTALL)
 
 
 def _jbodat_plus_conds(raw: str) -> list[str]:

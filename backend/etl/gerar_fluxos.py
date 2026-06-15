@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 # Tokens conhecidos: JBSTAT (estático/controle), JBODAT, JBPREV, JOBNEXT, JB????
 # JOBNEXT tem 7 chars; os demais JB???? têm 6 chars.
 _DATE_PAT  = r'(?:JOBNEXT|JB[A-Z0-9*]{4})'
-_OUT_RE    = re.compile(rf'(.+?{_DATE_PAT})([+\-])', re.IGNORECASE)
-_IN_RE     = re.compile(rf'.+?{_DATE_PAT}',          re.IGNORECASE)
+_OUT_RE    = re.compile(rf'(.+?{_DATE_PAT})\s*([+\-])', re.IGNORECASE | re.DOTALL)
+_IN_RE     = re.compile(rf'.+?{_DATE_PAT}',            re.IGNORECASE | re.DOTALL)
 _JBSTAT_RE = re.compile(r'JBSTAT', re.IGNORECASE)
 
 
