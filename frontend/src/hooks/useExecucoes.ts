@@ -31,10 +31,10 @@ export interface ResumoExecucoes {
   maior_duracao: number;
 }
 
-export interface VolumeData   { data: string; total: number; ok: number; nok: number; }
-export interface TopDurData   { job: string; avg_dur: number; max_dur: number; }
-export interface HoraData     { hora: number; total: number; }
-export interface IsdData      { job: string; total: number; }
+export interface VolumeData     { data: string; total: number; ok: number; nok: number; }
+export interface TopDurData     { job: string; avg_dur: number; max_dur: number; }
+export interface HoraData       { hora: number; total: number; ok: number; nok: number; }
+export interface IsdData        { job: string; total: number; }
 export interface TimeseriesItem { data: string; duracao: number; status: string; }
 
 export interface GraficosData {
@@ -44,6 +44,14 @@ export interface GraficosData {
   por_hora: HoraData[];
   isd_execucoes: IsdData[];
   timeseries: TimeseriesItem[];
+}
+
+export interface SlaItem {
+  tabela: string;
+  job: string;
+  avg_dur: number;
+  max_dur: number;
+  total_exec: number;
 }
 
 function buildParams(filtros: FiltrosExecucao, extra?: Record<string, string>) {
@@ -88,4 +96,16 @@ export const useRotinasDisponiveis = () =>
       return data;
     },
     staleTime: 5 * 60 * 1000,
+  });
+
+export const useSlaJobs = (slaMinutos: number) =>
+  useQuery<{ jobs: SlaItem[]; sla_minutos: number }>({
+    queryKey: ['execucoes-sla', slaMinutos],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        `${API_URL}/api/execucoes/sla?sla_minutos=${slaMinutos}`,
+      );
+      return data;
+    },
+    staleTime: 2 * 60 * 1000,
   });

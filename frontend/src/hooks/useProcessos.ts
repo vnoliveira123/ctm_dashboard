@@ -111,3 +111,43 @@ export const useFiltrosDisponiveis = () => {
     staleTime: 5 * 60 * 1000,
   });
 };
+
+export interface JobSemExecucao {
+  tabela: string;
+  job: string;
+  grupo: string;
+  periodicidade: string | null;
+  carga: string | null;
+}
+
+export interface AlertaNaoPadrao {
+  tabela: string;
+  job: string;
+  grupo: string;
+  tipo_alerta: string;
+  total_exec: number;
+}
+
+export const useJobsSemExecucao = (limit = 50) =>
+  useQuery<{ jobs: JobSemExecucao[]; total: number }>({
+    queryKey: ['processos-sem-execucao', limit],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        `${API_URL}/api/processos/sem-execucao?limit=${limit}`,
+      );
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+export const useAlertasNaoPadrao = () =>
+  useQuery<{ alertas: AlertaNaoPadrao[] }>({
+    queryKey: ['processos-alertas-nao-padrao'],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        `${API_URL}/api/processos/alertas-nao-padrao`,
+      );
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });

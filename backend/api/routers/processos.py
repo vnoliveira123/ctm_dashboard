@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from api.db.database import get_db
-from api.db.queries import get_processos, get_processos_graficos, get_stats_processo, get_stats_dashboard, get_periodicidades_disponiveis
+from api.db.queries import (
+    get_processos, get_processos_graficos, get_stats_processo,
+    get_stats_dashboard, get_periodicidades_disponiveis,
+    get_jobs_sem_execucao, get_alertas_nao_padrao,
+)
+from api.middleware.cache import get_or_cache
 from typing import Optional, List
 
 router = APIRouter()
@@ -9,16 +14,37 @@ router = APIRouter()
 
 @router.get("/filtros")
 async def listar_opcoes_filtro(db: Session = Depends(get_db)):
-    """Retorna opções disponíveis para os filtros (valores distintos do banco)."""
-    return {
-        "periodicidades": get_periodicidades_disponiveis(db),
-    }
+    return get_or_cache(
+        "cache:processos:filtros", 600,
+        lambda: {"periodicidades": get_periodicidades_disponiveis(db)},
+    )
 
 
 @router.get("/graficos")
 async def obter_graficos_processos(db: Session = Depends(get_db)):
-    """Dados agregados globais para os gráficos da tela de Processos."""
-    return get_processos_graficos(db)
+    return get_or_cache(
+        "cache:processos:graficos", 300,
+        lambda: get_processos_graficos(db),
+    )
+
+
+@router.get("/sem-execucao")
+async def listar_jobs_sem_execucao(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    def _fetch():
+        jobs = get_jobs_sem_execucao(db, limit=limit)
+        return {"jobs": jobs, "total": len(jobs)}
+    return get_or_cache(f"cache:processos:sem-execucao:{limit}", 600, _fetch)
+
+
+@router.get("/alertas-nao-padrao")
+async def listar_alertas_nao_padrao(db: Session = Depends(get_db)):
+    return get_or_cache(
+        "cache:processos:alertas-nao-padrao", 600,
+        lambda: {"alertas": get_alertas_nao_padrao(db)},
+    )
 
 
 @router.get("/")
@@ -40,7 +66,6 @@ async def listar_processos(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Listar processos cadastrados com filtros avançados."""
     skip = (page - 1) * limit
 
     tem_alerta_bool = None
@@ -95,7 +120,6 @@ async def listar_processos(
 
 @router.get("/stats")
 async def obter_stats_dashboard(db: Session = Depends(get_db)):
-    """Obter estatísticas gerais do dashboard."""
     return get_stats_dashboard(db)
 
 
@@ -104,7 +128,6 @@ async def obter_stats_processo(
     tabela: str, job: str, grupo: str,
     db: Session = Depends(get_db),
 ):
-    """Obter estatísticas agregadas de um processo."""
     stats = get_stats_processo(db, tabela=tabela, job=job, grupo=grupo)
     if not stats:
         return {"error": "Processo não encontrado"}

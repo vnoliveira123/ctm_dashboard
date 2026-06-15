@@ -230,11 +230,13 @@ def get_execucoes_graficos(db: Session,
         .all()
     )
 
-    # ── Execuções por hora do dia ─────────────────────────────────
+    # ── Execuções por hora do dia (com breakdown OK / NOT OK) ────
     hora_rows = (
         base.with_entities(
             extract('hour', ExecucaoTimeline.data_execucao).label('hora'),
             func.count(ExecucaoTimeline.id).label('total'),
+            func.sum(case((ExecucaoTimeline.status == 'OK',     1), else_=0)).label('ok'),
+            func.sum(case((ExecucaoTimeline.status == 'NOT OK', 1), else_=0)).label('nok'),
         )
         .group_by(extract('hour', ExecucaoTimeline.data_execucao))
         .order_by('hora')
@@ -310,7 +312,8 @@ def get_execucoes_graficos(db: Session,
             for r in top_dur_rows
         ],
         'por_hora': [
-            {'hora': int(r.hora), 'total': r.total}
+            {'hora': int(r.hora), 'total': r.total,
+             'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
             for r in hora_rows
         ],
         'isd_execucoes': [
@@ -329,6 +332,108 @@ def get_rotinas_disponiveis(db: Session) -> List[str]:
         .all()
     )
     return [r.rotina for r in rows if r.rotina]
+
+
+def get_jobs_sem_execucao(db: Session, limit: int = 50):
+    """Jobs cadastrados no CTM que nunca apareceram no LOG de execuções."""
+    rows = (
+        db.query(
+            Processo.tabela,
+            Processo.job,
+            Processo.grupo,
+            Processo.periodicidade,
+            Processo.carga,
+        )
+        .outerjoin(
+            ExecucaoTimeline,
+            and_(
+                Processo.tabela == ExecucaoTimeline.tabela,
+                Processo.job    == ExecucaoTimeline.job,
+            ),
+        )
+        .filter(ExecucaoTimeline.tabela == None)
+        .order_by(Processo.tabela, Processo.job)
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            'tabela':        r.tabela,
+            'job':           r.job,
+            'grupo':         r.grupo,
+            'periodicidade': r.periodicidade,
+            'carga':         r.carga,
+        }
+        for r in rows
+    ]
+
+
+def get_alertas_nao_padrao(db: Session):
+    """Jobs com alerta cujo tipo_alerta é diferente de 'U-ECS', com volume de execuções."""
+    exec_sub = (
+        db.query(
+            ExecucaoTimeline.tabela,
+            ExecucaoTimeline.job,
+            func.count(ExecucaoTimeline.id).label('total_exec'),
+        )
+        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
+        .subquery()
+    )
+    rows = (
+        db.query(
+            Processo.tabela,
+            Processo.job,
+            Processo.grupo,
+            Processo.tipo_alerta,
+            func.coalesce(exec_sub.c.total_exec, 0).label('total_exec'),
+        )
+        .outerjoin(exec_sub, and_(
+            Processo.tabela == exec_sub.c.tabela,
+            Processo.job    == exec_sub.c.job,
+        ))
+        .filter(Processo.tem_alerta == True)
+        .filter(or_(Processo.tipo_alerta == None, Processo.tipo_alerta != 'U-ECS'))
+        .order_by(desc('total_exec'))
+        .all()
+    )
+    return [
+        {
+            'tabela':      r.tabela,
+            'job':         r.job,
+            'grupo':       r.grupo,
+            'tipo_alerta': r.tipo_alerta or '(sem tipo)',
+            'total_exec':  int(r.total_exec),
+        }
+        for r in rows
+    ]
+
+
+def get_sla_jobs(db: Session, sla_minutos: float = 30.0):
+    """Jobs cuja duração média excede o limiar de SLA configurável."""
+    rows = (
+        db.query(
+            ExecucaoTimeline.tabela,
+            ExecucaoTimeline.job,
+            func.avg(ExecucaoTimeline.duracao_minutos).label('avg_dur'),
+            func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
+            func.count(ExecucaoTimeline.id).label('total_exec'),
+        )
+        .filter(ExecucaoTimeline.duracao_minutos != None)
+        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
+        .having(func.avg(ExecucaoTimeline.duracao_minutos) > sla_minutos)
+        .order_by(desc('avg_dur'))
+        .all()
+    )
+    return [
+        {
+            'tabela':     r.tabela,
+            'job':        r.job,
+            'avg_dur':    round(float(r.avg_dur), 2),
+            'max_dur':    round(float(r.max_dur), 2),
+            'total_exec': int(r.total_exec),
+        }
+        for r in rows
+    ]
 
 
 # ══════════════════════════════════════════════════════════════════

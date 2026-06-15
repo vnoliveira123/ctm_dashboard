@@ -13,8 +13,8 @@ import TimerIcon from '@mui/icons-material/Timer';
 import SpeedIcon from '@mui/icons-material/Speed';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
-  useExecucoes, useGraficosExecucoes, useRotinasDisponiveis,
-  FiltrosExecucao, VolumeData, TopDurData, HoraData, IsdData, TimeseriesItem,
+  useExecucoes, useGraficosExecucoes, useRotinasDisponiveis, useSlaJobs,
+  FiltrosExecucao, VolumeData, TopDurData, HoraData, IsdData, TimeseriesItem, SlaItem,
 } from '../hooks/useExecucoes';
 
 const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
@@ -153,11 +153,16 @@ const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
   );
 };
 
-// ── Chart 4: Por hora do dia ──────────────────────────────────────────────────
+// ── Chart 4: Por hora do dia (stacked OK/NOK, pior hora destacada) ────────────
 const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
   if (!data.length) return <SemDados />;
-  const allHours = Array.from({ length: 24 }, (_, i) => ({ hora: i, total: 0 }));
-  data.forEach(d => { allHours[d.hora].total = d.total; });
+  const allHours = Array.from({ length: 24 }, (_, i) => ({
+    hora: i, total: 0, ok: 0, nok: 0,
+  }));
+  data.forEach(d => {
+    allHours[d.hora] = { hora: d.hora, total: d.total, ok: d.ok ?? 0, nok: d.nok ?? 0 };
+  });
+  const worstHora = allHours.reduce((mx, h) => h.nok > mx.nok ? h : mx, allHours[0]);
   const IH = 150;
   const x = d3.scaleBand().domain(allHours.map(d => String(d.hora))).range([0, IW]).padding(0.15);
   const y = d3.scaleLinear().domain([0, d3.max(allHours, d => d.total) || 1]).range([IH, 0]).nice();
@@ -165,18 +170,38 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
     <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
       <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
         <Eixo scale={y} orient="left" innerSize={IH} />
-        {allHours.map(d => (
-          <g key={d.hora}>
-            <rect x={x(String(d.hora))!} y={y(d.total)} width={x.bandwidth()}
-                  height={IH - y(d.total)} fill="#1976d2" rx={2} />
-            {d.hora % 3 === 0 && (
-              <text x={(x(String(d.hora)) || 0) + x.bandwidth() / 2} y={IH + 16}
-                    textAnchor="middle" fontSize={9} fill="#888">{d.hora}h</text>
-            )}
-          </g>
-        ))}
+        {allHours.map(d => {
+          const bx = x(String(d.hora))!;
+          const bw = x.bandwidth();
+          const isWorst = d.hora === worstHora.hora && d.nok > 0;
+          return (
+            <g key={d.hora}>
+              {isWorst && (
+                <rect x={bx - 1} y={y(d.total) - 2} width={bw + 2} height={IH - y(d.total) + 4}
+                      fill="none" stroke="#ff9800" strokeWidth={2} rx={2} />
+              )}
+              {/* OK — base verde */}
+              <rect x={bx} y={y(d.ok)} width={bw} height={IH - y(d.ok)} fill="#4caf50" rx={2} />
+              {/* NOT OK — topo vermelho */}
+              {d.nok > 0 && (
+                <rect x={bx} y={y(d.total)} width={bw}
+                      height={Math.max(0, y(d.ok) - y(d.total))} fill="#f44336" rx={2} />
+              )}
+              {d.hora % 3 === 0 && (
+                <text x={bx + bw / 2} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">
+                  {d.hora}h
+                </text>
+              )}
+            </g>
+          );
+        })}
         <line y1={IH} y2={IH} x1={0} x2={IW} stroke="#ccc" />
         <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Hora do dia</text>
+        <Legend items={[
+          { color: '#4caf50', label: 'OK' },
+          { color: '#f44336', label: 'NOT OK' },
+          { color: '#ff9800', label: 'Pior hora' },
+        ]} x={IW - 90} y={-8} />
       </g>
     </svg>
   );
@@ -289,10 +314,13 @@ export const Tela2Execucoes: React.FC = () => {
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosExecucao>(FILTROS_VAZIOS);
   const [page, setPage] = useState(1);
   const [expandido, setExpandido] = useState(true);
+  const [slaMin, setSlaMin] = useState(30);
+  const [slaInput, setSlaInput] = useState('30');
 
   const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
   const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
   const { data: rotinasData }        = useRotinasDisponiveis();
+  const { data: slaData }            = useSlaJobs(slaMin);
 
   const set = (campo: keyof FiltrosExecucao) => (v: string) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
@@ -421,6 +449,53 @@ export const Tela2Execucoes: React.FC = () => {
           </ChartCard>
         </Grid>
       </Grid>
+
+      {/* SLA por Job */}
+      <Paper variant="outlined" sx={{ mb: 3, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" fontWeight={700}>SLA por Job — Duração Média Acima do Limiar</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+            <TextField
+              label="Limiar (min)" type="number" size="small" sx={{ width: 130 }}
+              value={slaInput}
+              onChange={e => setSlaInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(slaInput); if (!isNaN(v) && v >= 0) setSlaMin(v); }}
+              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(slaInput); if (!isNaN(v) && v >= 0) setSlaMin(v); } }}
+              inputProps={{ min: 0, step: 1 }}
+            />
+          </Box>
+        </Box>
+        {!slaData?.jobs.length ? (
+          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+            Nenhum job com duração média acima de {slaMin} min.
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'warning.light' }}>
+                  {['Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
+                    <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(slaData?.jobs ?? []).map((j: SlaItem, i: number) => (
+                  <TableRow key={i} hover>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.job}</TableCell>
+                    <TableCell>
+                      <Chip label={`${j.avg_dur.toFixed(1)} min`} size="small" color="warning" />
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.8rem' }}>{j.max_dur.toFixed(1)}</TableCell>
+                    <TableCell sx={{ fontSize: '0.8rem' }}>{j.total_exec.toLocaleString('pt-BR')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Paper>
 
       {/* Tabela */}
       {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>}

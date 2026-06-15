@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from api.db.database import get_db
-from api.db.queries import get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis
+from api.db.queries import get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis, get_sla_jobs
+from api.middleware.cache import get_or_cache
 from typing import Optional
 
 router = APIRouter()
@@ -9,8 +10,22 @@ router = APIRouter()
 
 @router.get("/rotinas")
 async def listar_rotinas(db: Session = Depends(get_db)):
-    """Retorna prefixos de 4 letras distintos das tabelas (rotinas)."""
-    return {"rotinas": get_rotinas_disponiveis(db)}
+    return get_or_cache(
+        "cache:execucoes:rotinas", 600,
+        lambda: {"rotinas": get_rotinas_disponiveis(db)},
+    )
+
+
+@router.get("/sla")
+async def obter_sla_jobs(
+    sla_minutos: float = Query(30.0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Jobs cuja duração média excede o limiar de SLA (em minutos)."""
+    def _fetch():
+        jobs = get_sla_jobs(db, sla_minutos=sla_minutos)
+        return {"jobs": jobs, "sla_minutos": sla_minutos}
+    return get_or_cache(f"cache:execucoes:sla:{sla_minutos}", 300, _fetch)
 
 
 @router.get("/graficos")
@@ -24,7 +39,6 @@ async def obter_graficos(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Retorna todos os dados agregados para os gráficos do painel."""
     return get_execucoes_graficos(
         db,
         tabela=tabela, job=job, grupo_prefix=grupo,
@@ -46,7 +60,6 @@ async def listar_execucoes(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Listar execuções com filtros avançados e paginação."""
     skip = (page - 1) * limit
     resultado = get_execucoes(
         db, skip=skip, limit=limit,
