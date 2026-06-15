@@ -86,36 +86,39 @@ const GraficoVolumeDiario: React.FC<{ data: VolumeData[] }> = ({ data }) => {
   );
 };
 
-// ── Chart 2: Top 10 duração (barras horizontais) ─────────────────────────────
+// ── Chart 2: Duração por job (barras horizontais, scroll) ────────────────────
 const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
   if (!data.length) return <SemDados />;
-  const barH = 22, gap = 4;
+  const barH = 20, gap = 4;
   const IH = data.length * (barH + gap);
   const x = d3.scaleLinear().domain([0, d3.max(data, d => d.avg_dur) || 1]).range([0, IW]).nice();
   const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.15);
   return (
-    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
-      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-        {x.ticks(5).map(t => (
-          <g key={t}>
-            <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-            <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t.toFixed(0)}</text>
-          </g>
-        ))}
-        {data.map(d => (
-          <g key={d.job}>
-            <rect x={0} y={y(d.job)!} width={x(d.avg_dur)} height={y.bandwidth()} fill="#7b1fa2" rx={2} />
-            <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                  textAnchor="end" fontSize={10} fill="#555">
-              {d.job.slice(-10)}
-            </text>
-            <text x={x(d.avg_dur) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                  fontSize={9} fill="#666">{d.avg_dur.toFixed(1)} min</text>
-          </g>
-        ))}
-        <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Duração média (min)</text>
-      </g>
-    </svg>
+    <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
+           style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
+        <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+          {x.ticks(5).map(t => (
+            <g key={t}>
+              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
+              <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t.toFixed(0)}</text>
+            </g>
+          ))}
+          {data.map(d => (
+            <g key={d.job}>
+              <rect x={0} y={y(d.job)!} width={x(d.avg_dur)} height={y.bandwidth()} fill="#7b1fa2" rx={2} />
+              <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                    textAnchor="end" fontSize={10} fill="#555">
+                {d.job.slice(-10)}
+              </text>
+              <text x={x(d.avg_dur) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                    fontSize={9} fill="#666">{d.avg_dur.toFixed(1)} min</text>
+            </g>
+          ))}
+          <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Duração média (min)</text>
+        </g>
+      </svg>
+    </Box>
   );
 };
 
@@ -217,33 +220,36 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
   );
 };
 
-// ── Chart 5: Execuções ISD ────────────────────────────────────────────────────
+// ── Chart 5: Execuções ISD (scroll) ──────────────────────────────────────────
 const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
   if (!data.length) return <SemDados msg="Nenhum job com ISD ativo no período selecionado." />;
   const barH = 20, IH = data.length * (barH + 4);
   const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW]).nice();
   const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.2);
   return (
-    <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%">
-      <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-        {x.ticks(5).map(t => (
-          <g key={t}>
-            <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-            <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
-          </g>
-        ))}
-        {data.map(d => (
-          <g key={d.job}>
-            <rect x={0} y={y(d.job)!} width={x(d.total)} height={y.bandwidth()} fill="#e65100" rx={2} />
-            <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                  textAnchor="end" fontSize={10} fill="#555">{d.job.slice(-10)}</text>
-            <text x={x(d.total) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                  fontSize={9} fill="#666">{d.total}</text>
-          </g>
-        ))}
-        <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
-      </g>
-    </svg>
+    <Box sx={{ maxHeight: 260, overflowY: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
+           style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
+        <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
+          {x.ticks(5).map(t => (
+            <g key={t}>
+              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
+              <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
+            </g>
+          ))}
+          {data.map(d => (
+            <g key={d.job}>
+              <rect x={0} y={y(d.job)!} width={x(d.total)} height={y.bandwidth()} fill="#e65100" rx={2} />
+              <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                    textAnchor="end" fontSize={10} fill="#555">{d.job.slice(-10)}</text>
+              <text x={x(d.total) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
+                    fontSize={9} fill="#666">{d.total}</text>
+            </g>
+          ))}
+          <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
+        </g>
+      </svg>
+    </Box>
   );
 };
 
@@ -326,6 +332,7 @@ export const Tela2Execucoes: React.FC = () => {
   const [expandido, setExpandido] = useState(true);
   const [slaMin, setSlaMin] = useState(30);
   const [slaInput, setSlaInput] = useState('30');
+  const [exibirSla, setExibirSla] = useState(false);
 
   const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
   const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
@@ -422,26 +429,17 @@ export const Tela2Execucoes: React.FC = () => {
           } color="#7b1fa2" />
       </Box>
 
-      {/* Série temporal — largura total, logo após os cards */}
+      {/* Série temporal — largura total, altura compacta */}
       <ChartCard title={`Série Temporal de Execuções${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
-        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={220} />
+        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={130} />
       </ChartCard>
 
-      {/* Gráficos — grid 2 colunas uniformes */}
+      {/* Gráficos — grid 2 colunas */}
       <Grid container spacing={2} sx={{ mt: 2, mb: 3 }}>
+        {/* Linha 1: Volume por data | Hora do dia */}
         <Grid item xs={12} md={6}>
           <ChartCard title="Volume de Execuções por Data">
             <GraficoVolumeDiario data={graficos?.volume_por_data ?? []} />
-          </ChartCard>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <ChartCard title="Status: OK vs NOT OK">
-            <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
-          </ChartCard>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <ChartCard title="Top 10 Jobs por Duração Média (min)">
-            <GraficoTopDuracao data={graficos?.top_duracao ?? []} />
           </ChartCard>
         </Grid>
         <Grid item xs={12} md={6}>
@@ -449,6 +447,18 @@ export const Tela2Execucoes: React.FC = () => {
             <GraficoHorario data={graficos?.por_hora ?? []} />
           </ChartCard>
         </Grid>
+        {/* Linha 2: Pizza | Duração por job */}
+        <Grid item xs={12} md={6}>
+          <ChartCard title="Status: OK vs NOT OK">
+            <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
+          </ChartCard>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ChartCard title="Jobs por Duração Média (min)">
+            <GraficoTopDuracao data={graficos?.top_duracao ?? []} />
+          </ChartCard>
+        </Grid>
+        {/* Linha 3: ISD largura total */}
         <Grid item xs={12}>
           <ChartCard title="Jobs com ISD — Volume de Execuções">
             <GraficoISD data={graficos?.isd_execucoes ?? []} />
@@ -456,13 +466,21 @@ export const Tela2Execucoes: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* SLA por Job */}
-      <Paper variant="outlined" sx={{ mb: 3, p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5, flexWrap: 'wrap' }}>
-          <Typography variant="subtitle2" fontWeight={700}>SLA por Job — Duração Média Acima do Limiar</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+      {/* SLA por Job — colapsável */}
+      <Paper variant="outlined" sx={{ mb: 3 }}>
+        <Box
+          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', flexWrap: 'wrap' }}
+          onClick={() => setExibirSla(v => !v)}
+        >
+          <SpeedIcon fontSize="small" color="warning" />
+          <Typography variant="subtitle2" fontWeight={600}>SLA por Job — Duração Média Acima do Limiar</Typography>
+          {slaData?.jobs.length ? (
+            <Chip label={`${slaData.jobs.length} job${slaData.jobs.length !== 1 ? 's' : ''}`} size="small" color="warning" sx={{ ml: 0.5 }} />
+          ) : null}
+          {/* Input de limiar no cabeçalho — para não perder ao colapsar */}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }} onClick={e => e.stopPropagation()}>
             <TextField
-              label="Limiar (min)" type="number" size="small" sx={{ width: 130 }}
+              label="Limiar (min)" type="number" size="small" sx={{ width: 120 }}
               value={slaInput}
               onChange={e => setSlaInput(e.target.value)}
               onBlur={() => { const v = parseFloat(slaInput); if (!isNaN(v) && v >= 0) setSlaMin(v); }}
@@ -470,37 +488,43 @@ export const Tela2Execucoes: React.FC = () => {
               inputProps={{ min: 0, step: 1 }}
             />
           </Box>
-        </Box>
-        {!slaData?.jobs.length ? (
-          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-            Nenhum job com duração média acima de {slaMin} min.
+          <Typography variant="caption" color="text.secondary">
+            {exibirSla ? 'Recolher ▲' : 'Expandir ▼'}
           </Typography>
-        ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'warning.light' }}>
-                  {['Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
-                    <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(slaData?.jobs ?? []).map((j: SlaItem, i: number) => (
-                  <TableRow key={i} hover>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.job}</TableCell>
-                    <TableCell>
-                      <Chip label={`${j.avg_dur.toFixed(1)} min`} size="small" color="warning" />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.8rem' }}>{j.max_dur.toFixed(1)}</TableCell>
-                    <TableCell sx={{ fontSize: '0.8rem' }}>{j.total_exec.toLocaleString('pt-BR')}</TableCell>
+        </Box>
+        <Collapse in={exibirSla}>
+          <Divider />
+          {!slaData?.jobs.length ? (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+              Nenhum job com duração média acima de {slaMin} min.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'warning.light' }}>
+                    {['Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
+                      <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+                </TableHead>
+                <TableBody>
+                  {(slaData?.jobs ?? []).map((j: SlaItem, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.job}</TableCell>
+                      <TableCell>
+                        <Chip label={`${j.avg_dur.toFixed(1)} min`} size="small" color="warning" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{j.max_dur.toFixed(1)}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{j.total_exec.toLocaleString('pt-BR')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Collapse>
       </Paper>
 
       {/* Tabela */}

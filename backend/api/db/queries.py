@@ -226,7 +226,6 @@ def get_execucoes_graficos(db: Session,
         .filter(ExecucaoTimeline.duracao_minutos != None)
         .group_by(ExecucaoTimeline.job)
         .order_by(desc('avg_dur'))
-        .limit(10)
         .all()
     )
 
@@ -268,7 +267,6 @@ def get_execucoes_graficos(db: Session,
     isd_rows = (
         isd_base.group_by(ExecucaoTimeline.job)
         .order_by(desc('total'))
-        .limit(15)
         .all()
     )
 
