@@ -72,6 +72,7 @@ export const useExecucoes = (filtros: FiltrosExecucao = {}, page = 1) =>
 export const useGraficosExecucoes = (filtros: FiltrosExecucao) =>
   useQuery<GraficosData>({
     queryKey: ['execucoes-graficos', filtros],
+    staleTime: 2 * 60 * 1000,
     queryFn: async () => {
       const p = buildParams(filtros);
       const { data } = await axios.get(`${API_URL}/api/execucoes/graficos?${p}`);

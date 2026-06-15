@@ -415,7 +415,7 @@ export const Tela2Execucoes: React.FC = () => {
             <GraficoHorario data={graficos?.por_hora ?? []} />
           </ChartCard>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <ChartCard title="Jobs com ISD — Volume de Execuções">
             <GraficoISD data={graficos?.isd_execucoes ?? []} />
           </ChartCard>
