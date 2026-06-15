@@ -55,45 +55,46 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 // ── 1. Pizza — Periodicidades ─────────────────────────────────────────────────
 const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const R = 75; const IR = 42; const CX = 110; const CY = 100;
+  const R = 100; const IR = 56; const CX = 130; const CY = 120;
+  const VW = 560; const VH = 260;
   const pie   = d3.pie<{ periodicidade: string; total: number }>().value(d => d.total).sort(null);
   const arc   = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(IR).outerRadius(R);
-  const label = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(R + 14).outerRadius(R + 14);
+  const arcLbl = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
   const slices = pie(data);
   const total  = d3.sum(data, d => d.total);
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-      <svg width={220} height={200} style={{ flexShrink: 0 }}>
-        <g transform={`translate(${CX},${CY})`}>
-          {slices.map((s, i) => (
-            <g key={i}>
-              <path d={arc(s) ?? ''} fill={CORES_PERIOD[i % CORES_PERIOD.length]} stroke="white" strokeWidth={2}>
-                <title>{s.data.periodicidade}: {s.data.total}</title>
-              </path>
-              {(s.endAngle - s.startAngle) > 0.3 && (
-                <text transform={`translate(${label.centroid(s)})`}
-                      textAnchor="middle" fontSize={9} fill="white" fontWeight="bold" dy="0.35em">
-                  {Math.round(s.data.total / total * 100)}%
-                </text>
-              )}
-            </g>
-          ))}
-          <text textAnchor="middle" dy="0.35em" fontSize={11} fontWeight="bold" fill="#333">
-            {total}
-          </text>
-        </g>
-      </svg>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
-        {data.map((d, i) => (
-          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: CORES_PERIOD[i % CORES_PERIOD.length], flexShrink: 0 }} />
-            <Typography variant="caption" noWrap sx={{ maxWidth: 130 }}>{d.periodicidade}</Typography>
-            <Typography variant="caption" fontWeight={700} color="text.secondary">{d.total}</Typography>
-          </Box>
+    <svg viewBox={`0 0 ${VW} ${VH}`} width="100%">
+      <g transform={`translate(${CX},${CY})`}>
+        {slices.map((s, i) => (
+          <g key={i}>
+            <path d={arc(s) ?? ''} fill={CORES_PERIOD[i % CORES_PERIOD.length]} stroke="white" strokeWidth={2}>
+              <title>{s.data.periodicidade}: {s.data.total}</title>
+            </path>
+            {(s.endAngle - s.startAngle) > 0.25 && (
+              <text transform={`translate(${arcLbl.centroid(s)})`}
+                    textAnchor="middle" fontSize={11} fill="white" fontWeight="bold" dy="0.35em">
+                {Math.round(s.data.total / total * 100)}%
+              </text>
+            )}
+          </g>
         ))}
-      </Box>
-    </Box>
+        <text textAnchor="middle" dy="-0.2em" fontSize={15} fontWeight="bold" fill="#333">{total}</text>
+        <text textAnchor="middle" dy="1.2em" fontSize={10} fill="#999">jobs</text>
+      </g>
+      {/* Legenda lateral */}
+      <g transform={`translate(${CX + R + 24}, ${CY - (data.length * 18) / 2})`}>
+        {data.map((d, i) => (
+          <g key={i} transform={`translate(0,${i * 22})`}>
+            <rect width={12} height={12} rx={2} fill={CORES_PERIOD[i % CORES_PERIOD.length]} />
+            <text x={18} y={10} fontSize={11} fill="#444">{d.periodicidade}</text>
+            <text x={VW - CX - R - 24 - 8} y={10} fontSize={11} fill="#888" fontWeight="bold" textAnchor="end">
+              {d.total}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
   );
 };
 
@@ -265,27 +266,27 @@ export const Tela1Processos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 160 }}
+            {/* Linha 1 — campos de texto e selects sem sub-filtro */}
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job"    value={filtros.job}    size="small" sx={{ minWidth: 160 }}
+              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('job')(e.target.value)} />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
-                opcoes={GRUPOS.map(g => ({ value: g, label: g }))} />
+                opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={140} />
               <SelectFiltro label="Periodicidade" value={filtros.periodicidade || ''} onChange={set('periodicidade')}
-                opcoes={(opcoes?.periodicidades || []).map(p => ({ value: p, label: p }))} minWidth={180} />
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                opcoes={(opcoes?.periodicidades || []).map(p => ({ value: p, label: p }))} minWidth={170} />
               <SelectFiltro label="Confirm" value={filtros.confirm || ''} onChange={set('confirm')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={130} />
               <SelectFiltro label="Memlib" value={filtros.memlib || ''} onChange={set('memlib')}
-                opcoes={MEMLIBS.map(m => ({ value: m, label: m }))} minWidth={230} />
+                opcoes={MEMLIBS.map(m => ({ value: m, label: m }))} minWidth={220} />
             </Box>
+            {/* Linha 2 — selects com sub-filtro condicional */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <SelectFiltro label="Carga Automática" value={filtros.carga || ''} onChange={set('carga')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={180} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={170} />
               {filtros.carga === 'SIM' && (
-                <FormControl size="small" sx={{ minWidth: 220 }}>
+                <FormControl size="small" sx={{ minWidth: 210 }}>
                   <InputLabel>Horário de Carga</InputLabel>
                   <Select multiple value={filtros.horarios_carga || []}
                           onChange={e => set('horarios_carga')(e.target.value as string[])}
@@ -300,28 +301,24 @@ export const Tela1Processos: React.FC = () => {
                   </Select>
                 </FormControl>
               )}
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <SelectFiltro label="ISD" value={filtros.isd || ''} onChange={set('isd')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={120} />
               {filtros.isd === 'SIM' && (
                 <SelectFiltro label="Tipo de Evento ISD" value={filtros.evento_isd || ''} onChange={set('evento_isd')}
-                  opcoes={EVENTOS_ISD.map(e => ({ value: e, label: e }))} minWidth={220} />
+                  opcoes={EVENTOS_ISD.map(e => ({ value: e, label: e }))} minWidth={210} />
               )}
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <SelectFiltro label="Alerta" value={filtros.tem_alerta || ''} onChange={set('tem_alerta')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={130} />
               {filtros.tem_alerta === 'SIM' && (
                 <SelectFiltro label="Padrão de Alerta" value={filtros.padrao || ''} onChange={set('padrao')}
-                  opcoes={[{ value: 'SIM', label: 'Sim (Padrão)' }, { value: 'NAO', label: 'Não (Customizado)' }]} minWidth={200} />
+                  opcoes={[{ value: 'SIM', label: 'Sim (Padrão)' }, { value: 'NAO', label: 'Não (Customizado)' }]} minWidth={190} />
               )}
               {filtros.tem_alerta === 'NAO' && (
                 <SelectFiltro label="Tipo de Alerta" value={filtros.tipo_alerta || ''} onChange={set('tipo_alerta')}
-                  opcoes={TIPOS_ALERTA.map(t => ({ value: t, label: t }))} />
+                  opcoes={TIPOS_ALERTA.map(t => ({ value: t, label: t }))} minWidth={150} />
               )}
             </Box>
-            <Box sx={{ display: 'flex', gap: 1, pt: 0.5 }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
               <Button variant="contained" size="small" onClick={aplicar}>Aplicar Filtros</Button>
               <Button variant="outlined"  size="small" startIcon={<ClearIcon />} onClick={limpar}>Limpar</Button>
             </Box>
@@ -390,102 +387,104 @@ export const Tela1Processos: React.FC = () => {
         </>
       )}
 
-      {/* ── Jobs Sem Execução ── */}
-      {semExec && semExec.jobs.length > 0 && (
-        <Paper variant="outlined" sx={{ mb: 2 }}>
-          <Box
-            sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-            onClick={() => setExibirSemExec(v => !v)}
-          >
-            <PowerOffIcon fontSize="small" color="action" />
-            <Typography variant="subtitle2" fontWeight={600}>
-              Jobs Sem Execução (CTM × LOG)
-            </Typography>
-            <Chip label={semExec.total} size="small" sx={{ ml: 0.5 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-              {exibirSemExec ? 'Recolher ▲' : 'Expandir ▼'}
-            </Typography>
-          </Box>
-          <Collapse in={exibirSemExec}>
-            <Divider />
-            <TableContainer sx={{ p: 0 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
-                    {['Tabela', 'Job', 'Grupo', 'Periodicidade', 'Carga'].map(c => (
-                      <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {semExec.jobs.map((j: JobSemExecucao, i: number) => (
-                    <TableRow key={i} hover>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.tabela}</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{j.job}</TableCell>
-                      <TableCell>
-                        <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" color="default" />
-                      </TableCell>
-                      <TableCell sx={{ fontSize: '0.78rem' }}>{j.periodicidade ?? '-'}</TableCell>
-                      <TableCell>
-                        {j.carga === 'SIM'
-                          ? <Chip label="Sim" size="small" color="success" />
-                          : <Chip label="Não" size="small" variant="outlined" />}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Collapse>
-        </Paper>
-      )}
-
-      {/* ── Alertas Não Padronizados ── */}
-      {alertasNP && alertasNP.alertas.length > 0 && (
-        <Paper variant="outlined" sx={{ mb: 3 }}>
-          <Box
-            sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-            onClick={() => setExibirAlertasNP(v => !v)}
-          >
-            <NotificationsActiveIcon fontSize="small" color="error" />
-            <Typography variant="subtitle2" fontWeight={600}>
-              Alertas Não Padronizados (tipo_alerta ≠ U-ECS)
-            </Typography>
-            <Chip label={alertasNP.alertas.length} size="small" color="error" sx={{ ml: 0.5 }} />
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-              {exibirAlertasNP ? 'Recolher ▲' : 'Expandir ▼'}
-            </Typography>
-          </Box>
-          <Collapse in={exibirAlertasNP}>
-            <Divider />
-            <TableContainer sx={{ p: 0 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'error.light' }}>
-                    {['Tabela', 'Job', 'Grupo', 'Tipo Alerta', 'Execuções'].map(c => (
-                      <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{c}</TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {alertasNP.alertas.map((a: AlertaNaoPadrao, i: number) => (
-                    <TableRow key={i} hover>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.tabela}</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{a.job}</TableCell>
-                      <TableCell>
-                        <Chip label={a.grupo?.split('-')[0] ?? a.grupo} size="small" variant="outlined" color="default" />
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={a.tipo_alerta} size="small" color="error" />
-                      </TableCell>
-                      <TableCell sx={{ fontSize: '0.78rem' }}>{a.total_exec.toLocaleString('pt-BR')}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Collapse>
-        </Paper>
+      {/* ── Análise: Jobs Sem Execução + Alertas Não Padronizados (lado a lado) ── */}
+      {(semExec?.jobs.length > 0 || alertasNP?.alertas.length > 0) && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {semExec && semExec.jobs.length > 0 && (
+            <Grid item xs={12} md={6}>
+              <Paper variant="outlined" sx={{ height: '100%' }}>
+                <Box
+                  sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+                  onClick={() => setExibirSemExec(v => !v)}
+                >
+                  <PowerOffIcon fontSize="small" color="action" />
+                  <Typography variant="subtitle2" fontWeight={600}>Jobs Sem Execução (CTM × LOG)</Typography>
+                  <Chip label={semExec.total} size="small" sx={{ ml: 0.5 }} />
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {exibirSemExec ? 'Recolher ▲' : 'Expandir ▼'}
+                  </Typography>
+                </Box>
+                <Collapse in={exibirSemExec}>
+                  <Divider />
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'grey.100' }}>
+                          {['Tabela', 'Job', 'Grupo', 'Periodicidade', 'Carga'].map(c => (
+                            <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{c}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {semExec.jobs.map((j: JobSemExecucao, i: number) => (
+                          <TableRow key={i} hover>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{j.tabela}</TableCell>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{j.job}</TableCell>
+                            <TableCell>
+                              <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" />
+                            </TableCell>
+                            <TableCell sx={{ fontSize: '0.75rem' }}>{j.periodicidade ?? '-'}</TableCell>
+                            <TableCell>
+                              {j.carga === 'SIM'
+                                ? <Chip label="Sim" size="small" color="success" />
+                                : <Chip label="Não" size="small" variant="outlined" />}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Collapse>
+              </Paper>
+            </Grid>
+          )}
+          {alertasNP && alertasNP.alertas.length > 0 && (
+            <Grid item xs={12} md={semExec?.jobs.length > 0 ? 6 : 12}>
+              <Paper variant="outlined" sx={{ height: '100%' }}>
+                <Box
+                  sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+                  onClick={() => setExibirAlertasNP(v => !v)}
+                >
+                  <NotificationsActiveIcon fontSize="small" color="error" />
+                  <Typography variant="subtitle2" fontWeight={600}>Alertas Não Padronizados (≠ U-ECS)</Typography>
+                  <Chip label={alertasNP.alertas.length} size="small" color="error" sx={{ ml: 0.5 }} />
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {exibirAlertasNP ? 'Recolher ▲' : 'Expandir ▼'}
+                  </Typography>
+                </Box>
+                <Collapse in={exibirAlertasNP}>
+                  <Divider />
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'error.light' }}>
+                          {['Tabela', 'Job', 'Grupo', 'Tipo Alerta', 'Execuções'].map(c => (
+                            <TableCell key={c} sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{c}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {alertasNP.alertas.map((a: AlertaNaoPadrao, i: number) => (
+                          <TableRow key={i} hover>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{a.tabela}</TableCell>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{a.job}</TableCell>
+                            <TableCell>
+                              <Chip label={a.grupo?.split('-')[0] ?? a.grupo} size="small" variant="outlined" />
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={a.tipo_alerta} size="small" color="error" />
+                            </TableCell>
+                            <TableCell sx={{ fontSize: '0.75rem' }}>{a.total_exec.toLocaleString('pt-BR')}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Collapse>
+              </Paper>
+            </Grid>
+          )}
+        </Grid>
       )}
 
       {/* ── Tabela ── */}
