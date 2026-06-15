@@ -220,8 +220,23 @@ linhas = [
         comentario="JBODAT READ-ONLY : FIM"),
 ]
 
-with open(CSV_PATH, "a", encoding="utf-8", newline="\n") as f:
+# Tabelas geradas por este script — usadas para limpar execuções anteriores
+TABELAS_TESTE = {l.split("|")[0] for l in linhas}
+
+# Lê o CSV atual, remove linhas de teste existentes e re-escreve com as novas
+with open(CSV_PATH, "r", encoding="utf-8") as f:
+    linhas_originais = f.readlines()
+
+header   = linhas_originais[:1]
+producao = [l for l in linhas_originais[1:] if l.split("|")[0] not in TABELAS_TESTE]
+removidas = len(linhas_originais) - 1 - len(producao)
+
+with open(CSV_PATH, "w", encoding="utf-8", newline="\n") as f:
+    f.writelines(header)
+    f.writelines(producao)
     for linha in linhas:
         f.write(linha + "\n")
 
+print(f"Removidas {removidas} linha(s) de teste anteriores")
 print(f"Adicionadas {len(linhas)} linhas de teste em {CSV_PATH}")
+print(f"Total de linhas (sem header): {len(producao) + len(linhas)}")
