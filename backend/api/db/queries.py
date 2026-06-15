@@ -314,25 +314,77 @@ def get_stats_dashboard(db: Session):
 # FLUXOS
 # ══════════════════════════════════════════════════════════════════
 
-def get_fluxos_grafo(db: Session, grupo: str = None):
-    fluxos = db.query(Fluxo)
+def _posicao_fluxo(p: Processo) -> str:
+    has_in      = bool(p.in_counds  and p.in_counds.strip())
+    has_out_add = bool(p.out_counds and '+' in p.out_counds)
+    if not has_in:
+        return 'inicio'
+    if not has_out_add:
+        return 'fim'
+    return 'meio'
+
+
+def get_rotinas_processos(db: Session) -> List[str]:
+    rows = (
+        db.query(func.left(Processo.tabela, 4).label('rotina'))
+        .distinct().order_by('rotina').all()
+    )
+    return [r.rotina for r in rows if r.rotina]
+
+
+def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
+                     rotina=None, posicao=None, carga=None):
+    # 1. Filtrar processos
+    q = db.query(Processo)
     if grupo:
-        fluxos = fluxos.filter(Fluxo.grupo_origem == grupo)
-    fluxos = fluxos.all()
+        q = q.filter(Processo.grupo.like(f'{grupo}-%'))
+    if tabela:
+        q = q.filter(Processo.tabela.ilike(f'%{tabela}%'))
+    if job:
+        q = q.filter(Processo.job.ilike(f'%{job}%'))
+    if rotina:
+        q = q.filter(func.left(Processo.tabela, 4) == rotina)
+    if carga:
+        q = q.filter(Processo.carga == carga)
 
-    nodes = {}
-    for f in fluxos:
-        ko = f"{f.tabela_origem}_{f.job_origem}"
-        kd = f"{f.tabela_destino}_{f.job_destino}"
-        if ko not in nodes:
-            nodes[ko] = {'id': ko, 'label': f.job_origem, 'grupo': f.grupo_origem}
-        if kd not in nodes:
-            nodes[kd] = {'id': kd, 'label': f.job_destino, 'grupo': f.grupo_origem}
+    processos = q.all()
 
-    edges = [
-        {'source': f"{f.tabela_origem}_{f.job_origem}",
-         'target': f"{f.tabela_destino}_{f.job_destino}",
-         'condicao': f.condicao or ''}
-        for f in fluxos
+    # 2. Calcular posição e filtrar se necessário
+    pos_map = {(p.tabela, p.job): _posicao_fluxo(p) for p in processos}
+    if posicao:
+        pos_map = {k: v for k, v in pos_map.items() if v == posicao}
+
+    filtered_keys = set(pos_map.keys())
+
+    # 3. Montar nós
+    nodes = [
+        {
+            'id':      f"{p.tabela}_{p.job}",
+            'label':   p.job,
+            'grupo':   p.grupo,
+            'tabela':  p.tabela,
+            'posicao': pos_map[(p.tabela, p.job)],
+            'carga':   p.carga or '',
+        }
+        for p in processos if (p.tabela, p.job) in filtered_keys
     ]
-    return {'nodes': list(nodes.values()), 'edges': edges}
+
+    if not nodes:
+        return {'nodes': [], 'edges': []}
+
+    node_ids = {n['id'] for n in nodes}
+
+    # 4. Arestas entre nós filtrados
+    fluxos = db.query(Fluxo).all()
+    edges = [
+        {
+            'source':   f"{f.tabela_origem}_{f.job_origem}",
+            'target':   f"{f.tabela_destino}_{f.job_destino}",
+            'condicao': f.condicao or '',
+        }
+        for f in fluxos
+        if f"{f.tabela_origem}_{f.job_origem}" in node_ids
+        and f"{f.tabela_destino}_{f.job_destino}" in node_ids
+    ]
+
+    return {'nodes': nodes, 'edges': edges}
