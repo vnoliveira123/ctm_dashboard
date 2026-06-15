@@ -3,11 +3,11 @@ import dagre from 'dagre';
 import * as d3 from 'd3';
 import {
   Box, TextField, Button, CircularProgress, Alert, Typography, Paper,
-  FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Chip,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip,
+  FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Chip, Tooltip,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon      from '@mui/icons-material/Clear';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFluxosGrafo, useRotinasFluxos, FiltrosFluxo, GrafoNode, GrafoEdge } from '../hooks/useFluxos';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -185,7 +185,18 @@ const ControleChip: React.FC<{ efetuado: boolean; suscetivel: boolean }> = ({ ef
   return <Typography variant="caption" color="text.disabled">—</Typography>;
 };
 
-// ── Tabela de jobs resultantes do filtro ──────────────────────────────────────
+// ── Tabela virtualizada de jobs resultantes do filtro ─────────────────────────
+const ROW_H   = 37;
+const COL_W   = [110, 120, 70, 160, 220, 220, 90, 60, 75, 110] as const;
+const HEADERS = ['Tabela', 'Job', 'Rotina', 'Grupo', 'IN_COUNDS', 'OUT_COUNDS', 'Posição', 'Carga', 'Horário', 'Controle'] as const;
+const TOTAL_W = COL_W.reduce((a, b) => a + b, 0);
+
+const Cell: React.FC<{ children: React.ReactNode; w: number }> = ({ children, w }) => (
+  <Box sx={{ width: w, flexShrink: 0, px: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', height: ROW_H }}>
+    {children}
+  </Box>
+);
+
 const TabelaJobs: React.FC<{ nodes: GrafoNode[] }> = ({ nodes }) => {
   const rows = useMemo(() =>
     [...nodes].sort((a, b) => {
@@ -197,11 +208,14 @@ const TabelaJobs: React.FC<{ nodes: GrafoNode[] }> = ({ nodes }) => {
     }),
   [nodes]);
 
-  const TH: React.FC<{ children: React.ReactNode; w?: number | string }> = ({ children, w }) => (
-    <TableCell sx={{ fontWeight: 700, fontSize: 12, py: 1, bgcolor: '#1565c0', color: 'white', whiteSpace: 'nowrap', width: w }}>
-      {children}
-    </TableCell>
-  );
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 8,
+  });
 
   return (
     <Paper variant="outlined" sx={{ mt: 2, borderRadius: 2, overflow: 'hidden' }}>
@@ -210,88 +224,113 @@ const TabelaJobs: React.FC<{ nodes: GrafoNode[] }> = ({ nodes }) => {
           Detalhe dos Jobs — {rows.length} registro{rows.length !== 1 ? 's' : ''}
         </Typography>
       </Box>
-      <TableContainer sx={{ maxHeight: 380 }}>
-        <Table size="small" stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TH w={110}>Tabela</TH>
-              <TH w={120}>Job</TH>
-              <TH w={70}>Rotina</TH>
-              <TH w={160}>Grupo</TH>
-              <TH>IN_COUNDS</TH>
-              <TH>OUT_COUNDS</TH>
-              <TH w={90}>Posição</TH>
-              <TH w={60}>Carga</TH>
-              <TH w={75}>Horário</TH>
-              <TH w={110}>Controle</TH>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((n, i) => (
-              <TableRow key={n.id} hover
-                        sx={{ bgcolor: i % 2 === 0 ? 'white' : '#fafafa' }}>
-                <TableCell sx={{ fontSize: 12, fontWeight: 600, color: '#e64a19', fontFamily: 'monospace' }}>
-                  {n.tabela}
-                </TableCell>
-                <TableCell sx={{ fontSize: 12, fontFamily: 'monospace' }}>{n.label}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{n.tabela.slice(0, 4)}</TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{n.grupo}</TableCell>
-                <TableCell sx={{ maxWidth: 220, overflow: 'hidden' }}>
+
+      {/* Cabeçalho fixo */}
+      <Box sx={{ bgcolor: '#1565c0', overflowX: 'hidden' }}>
+        <Box sx={{ display: 'flex', minWidth: TOTAL_W }}>
+          {HEADERS.map((h, i) => (
+            <Box key={h} sx={{
+              width: COL_W[i], flexShrink: 0, px: 1, py: 0.9,
+              fontSize: 12, fontWeight: 700, color: 'white', whiteSpace: 'nowrap',
+            }}>
+              {h}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* Corpo virtualizado */}
+      <div ref={parentRef} style={{ height: 380, overflowY: 'auto', overflowX: 'auto' }}>
+        <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative', minWidth: TOTAL_W }}>
+          {rowVirtualizer.getVirtualItems().map(vRow => {
+            const n = rows[vRow.index];
+            return (
+              <div
+                key={n.id}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${vRow.start}px)`,
+                  height: ROW_H,
+                  display: 'flex',
+                  minWidth: TOTAL_W,
+                  backgroundColor: vRow.index % 2 === 0 ? 'white' : '#fafafa',
+                  borderBottom: '1px solid #f0f0f0',
+                }}
+              >
+                <Cell w={COL_W[0]}>
+                  <span style={{ fontWeight: 600, color: '#e64a19', fontFamily: 'monospace', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {n.tabela}
+                  </span>
+                </Cell>
+                <Cell w={COL_W[1]}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {n.label}
+                  </span>
+                </Cell>
+                <Cell w={COL_W[2]}>
+                  <Typography variant="caption">{n.tabela.slice(0, 4)}</Typography>
+                </Cell>
+                <Cell w={COL_W[3]}>
+                  <Typography variant="caption" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {n.grupo}
+                  </Typography>
+                </Cell>
+                <Cell w={COL_W[4]}>
                   {n.in_counds ? (
                     <Tooltip title={n.in_counds} placement="top" arrow>
                       <Typography variant="caption" fontFamily="monospace"
-                                  sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help', color: '#1565c0' }}>
+                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help', color: '#1565c0' }}>
                         {n.in_counds}
                       </Typography>
                     </Tooltip>
                   ) : <Typography variant="caption" color="text.disabled">—</Typography>}
-                </TableCell>
-                <TableCell sx={{ maxWidth: 220, overflow: 'hidden' }}>
+                </Cell>
+                <Cell w={COL_W[5]}>
                   {n.out_counds ? (
-                    <>
-                      <Tooltip title={n.out_counds} placement="top" arrow>
-                        <Typography variant="caption" fontFamily="monospace"
-                                    sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis',
-                                          whiteSpace: 'nowrap', cursor: 'help',
-                                          color: n.condicoes_orfas.length > 0 ? '#f57f17' : '#b71c1c' }}>
-                          {n.out_counds}
-                        </Typography>
-                      </Tooltip>
-                      {n.condicoes_orfas.length > 0 && (
-                        <Tooltip
-                          title={`Condições sem destino:\n${n.condicoes_orfas.join('\n')}`}
-                          placement="bottom" arrow>
-                          <Chip size="small"
-                                label={`${n.condicoes_orfas.length} órfã${n.condicoes_orfas.length > 1 ? 's' : ''}`}
-                                sx={{ bgcolor: '#f57f17', color: 'white', fontSize: 10,
-                                      height: 18, cursor: 'help', mt: 0.3 }} />
-                        </Tooltip>
-                      )}
-                    </>
+                    <Tooltip
+                      title={n.condicoes_orfas.length > 0
+                        ? `${n.out_counds}\n\nCondições sem destino:\n${n.condicoes_orfas.join('\n')}`
+                        : n.out_counds}
+                      placement="top" arrow>
+                      <Typography variant="caption" fontFamily="monospace"
+                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help',
+                              color: n.condicoes_orfas.length > 0 ? '#f57f17' : '#b71c1c' }}>
+                        {n.out_counds}
+                        {n.condicoes_orfas.length > 0 && (
+                          <span style={{ marginLeft: 4, background: '#f57f17', color: 'white',
+                                         borderRadius: 3, padding: '0 4px', fontSize: 10 }}>
+                            {n.condicoes_orfas.length}✕
+                          </span>
+                        )}
+                      </Typography>
+                    </Tooltip>
                   ) : <Typography variant="caption" color="text.disabled">—</Typography>}
-                </TableCell>
-                <TableCell><PosChip posicao={n.posicao} /></TableCell>
-                <TableCell>
+                </Cell>
+                <Cell w={COL_W[6]}><PosChip posicao={n.posicao} /></Cell>
+                <Cell w={COL_W[7]}>
                   {n.carga === 'SIM' ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#ff8f00', flexShrink: 0 }} />
                       <Typography variant="caption" fontWeight={600}>SIM</Typography>
                     </Box>
-                  ) : (
-                    <Typography variant="caption" color="text.disabled">—</Typography>
-                  )}
-                </TableCell>
-                <TableCell sx={{ fontSize: 12 }}>
-                  {n.carga === 'SIM' && n.horario_carga ? `${n.horario_carga}h` : '—'}
-                </TableCell>
-                <TableCell>
+                  ) : <Typography variant="caption" color="text.disabled">—</Typography>}
+                </Cell>
+                <Cell w={COL_W[8]}>
+                  <Typography variant="caption">
+                    {n.carga === 'SIM' && n.horario_carga ? `${n.horario_carga}h` : '—'}
+                  </Typography>
+                </Cell>
+                <Cell w={COL_W[9]}>
                   <ControleChip efetuado={n.controle_efetuado} suscetivel={n.suscetivel_controle} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                </Cell>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </Paper>
   );
 };
@@ -479,7 +518,11 @@ export const Tela3Fluxos: React.FC = () => {
       )}
 
       {isLoading && <CircularProgress />}
-      {error    && <Alert severity="error">Erro ao carregar fluxos.</Alert>}
+      {error && (
+        <Alert severity="error">
+          {(error as any)?.response?.data?.detail ?? 'Erro ao carregar fluxos.'}
+        </Alert>
+      )}
 
       {!temFiltro && !isLoading && (
         <Paper variant="outlined" sx={{

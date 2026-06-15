@@ -518,6 +518,9 @@ def get_rotinas_processos(db: Session) -> List[str]:
     return [r.rotina for r in rows if r.rotina]
 
 
+_MAX_GRAPH_NODES = 500
+
+
 def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
                      rotina=None, posicao=None, carga=None, horario_carga=None,
                      controle=None):
@@ -616,6 +619,12 @@ def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
 
     if not nodes:
         return {'nodes': [], 'edges': []}
+
+    if len(nodes) > _MAX_GRAPH_NODES:
+        raise ValueError(
+            f"O filtro retornou {len(nodes)} nós. "
+            f"Refine os filtros (Rotina, Grupo ou Tabela) para exibir no máximo {_MAX_GRAPH_NODES} nós."
+        )
 
     node_ids = {n['id'] for n in nodes}
 

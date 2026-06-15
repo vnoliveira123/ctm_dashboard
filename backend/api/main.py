@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routers import processos, execucoes, fluxos
 from api.db.database import init_db
-from etl.scheduler import iniciar_scheduler_etl
 import logging
 
 # Configurar logging
@@ -43,13 +42,7 @@ async def startup_event():
         init_db()
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco: {e}")
-    
-    # Inicializar scheduler ETL
-    try:
-        iniciar_scheduler_etl()
-    except Exception as e:
-        logger.error(f"❌ Erro ao iniciar scheduler: {e}")
-    
+
     logger.info("✅ Aplicação iniciada com sucesso!")
 
 @app.get("/")

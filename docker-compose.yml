@@ -45,6 +45,28 @@
       - ./csv_input:/app/csv_input
     working_dir: /app
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -m etl.worker
+    environment:
+      DATABASE_URL: postgresql://log_dashboard:log_dashboard_password@postgres:5432/log_dashboard
+      REDIS_URL: redis://redis:6379/0
+      CSV_INPUT_PATH: /app/csv_input
+      ETL_SCHEDULE_HOUR: "2"
+      ETL_SCHEDULE_MINUTE: "5"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./csv_input:/app/csv_input
+    working_dir: /app
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend

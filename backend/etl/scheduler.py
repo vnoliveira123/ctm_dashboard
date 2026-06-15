@@ -6,6 +6,7 @@ from etl.ingestao_logs import ingerir_logs_incremental
 from etl.gerar_fluxos import gerar_fluxos_automaticos
 from etl.transformacoes import agregar_processos, agregar_execucoes_timeline
 from api.db.database import SessionLocal
+from api.middleware.cache import invalidar_padrao
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -65,7 +66,11 @@ def executar_etl():
         logger.info(f'  STATS: {count_stats} registros')
         logger.info(f'  TIMELINE: {count_timeline} registros')
         logger.info('=' * 60)
-        
+
+        # Invalida todo o cache após ETL para garantir dados frescos na API
+        invalidar_padrao('cache:*')
+        logger.info('Cache Redis invalidado')
+
     except Exception as e:
         logger.error(f'❌ ERRO NO ETL: {e}')
         import traceback
