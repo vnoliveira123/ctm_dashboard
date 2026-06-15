@@ -4,10 +4,10 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface FiltrosExecucao {
-  tabela?: string;
-  job?: string;
-  grupo?: string;
-  rotina?: string;
+  tabela?: string[];
+  job?: string[];
+  grupo?: string[];
+  rotina?: string[];
   data_inicio?: string;
   data_fim?: string;
   status?: string;
@@ -56,10 +56,10 @@ export interface SlaItem {
 
 function buildParams(filtros: FiltrosExecucao, extra?: Record<string, string>) {
   const p = new URLSearchParams();
-  if (filtros.tabela)      p.append('tabela',      filtros.tabela);
-  if (filtros.job)         p.append('job',         filtros.job);
-  if (filtros.grupo)       p.append('grupo',       filtros.grupo);
-  if (filtros.rotina)      p.append('rotina',      filtros.rotina);
+  (filtros.tabela ?? []).forEach(v => p.append('tabela', v));
+  (filtros.job    ?? []).forEach(v => p.append('job',    v));
+  (filtros.grupo  ?? []).forEach(v => p.append('grupo',  v));
+  (filtros.rotina ?? []).forEach(v => p.append('rotina', v));
   if (filtros.data_inicio) p.append('data_inicio', filtros.data_inicio);
   if (filtros.data_fim)    p.append('data_fim',    filtros.data_fim);
   if (filtros.status)      p.append('status',      filtros.status);

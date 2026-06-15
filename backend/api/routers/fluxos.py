@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from api.db.database import get_db
 from api.db.queries import get_fluxos_grafo, get_rotinas_processos
 from api.middleware.cache import get_or_cache
-from typing import Optional
+from typing import Optional, List
 
 router = APIRouter()
 
@@ -21,10 +21,10 @@ async def listar_rotinas_processos(db: Session = Depends(get_db)):
 
 @router.get("/grafo")
 async def obter_grafo_fluxos(
-    grupo:         Optional[str] = Query(None),
-    tabela:        Optional[str] = Query(None),
-    job:           Optional[str] = Query(None),
-    rotina:        Optional[str] = Query(None),
+    grupo:         List[str] = Query(default=[]),
+    tabela:        List[str] = Query(default=[]),
+    job:           List[str] = Query(default=[]),
+    rotina:        List[str] = Query(default=[]),
     posicao:       Optional[str] = Query(None),
     carga:         Optional[str] = Query(None),
     horario_carga: Optional[str] = Query(None),
@@ -33,16 +33,17 @@ async def obter_grafo_fluxos(
 ):
     """Retorna nós e arestas para o grafo de fluxo, com filtros."""
     cache_key = (
-        f"cache:fluxos:grafo:{grupo}:{tabela}:{job}:"
-        f"{rotina}:{posicao}:{carga}:{horario_carga}:{controle}"
+        f"cache:fluxos:grafo:{','.join(sorted(grupo))}:{','.join(sorted(tabela))}"
+        f":{','.join(sorted(job))}:{','.join(sorted(rotina))}"
+        f":{posicao}:{carga}:{horario_carga}:{controle}"
     )
     try:
         return get_or_cache(
             cache_key, 300,
             lambda: get_fluxos_grafo(
                 db,
-                grupo=grupo, tabela=tabela, job=job,
-                rotina=rotina, posicao=posicao, carga=carga,
+                grupos=grupo, tabelas=tabela, jobs=job,
+                rotinas=rotina, posicao=posicao, carga=carga,
                 horario_carga=horario_carga, controle=controle,
             ),
         )

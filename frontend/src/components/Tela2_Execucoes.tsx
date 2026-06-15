@@ -4,6 +4,7 @@ import {
   Box, Paper, Typography, TextField, Button, Chip, CircularProgress, Alert,
   Pagination, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Card, CardContent, Grid,
+  Autocomplete, Checkbox,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -18,7 +19,15 @@ import {
 } from '../hooks/useExecucoes';
 
 const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
-const FILTROS_VAZIOS: FiltrosExecucao = { tabela: '', job: '', grupo: '', rotina: '', data_inicio: '', data_fim: '', status: '' };
+
+function getFiltrosIniciais(): FiltrosExecucao {
+  const hoje = new Date();
+  const fim = hoje.toISOString().split('T')[0];
+  const d = new Date(hoje);
+  d.setDate(d.getDate() - 30);
+  return { tabela: [], job: [], grupo: [], rotina: [], data_inicio: d.toISOString().split('T')[0], data_fim: fim, status: '' };
+}
+const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], data_inicio: '', data_fim: '', status: '' };
 
 // ── Helpers D3 ───────────────────────────────────────────────────────────────
 
@@ -333,8 +342,8 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export const Tela2Execucoes: React.FC = () => {
-  const [filtros, setFiltros] = useState<FiltrosExecucao>(FILTROS_VAZIOS);
-  const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosExecucao>(FILTROS_VAZIOS);
+  const [filtros, setFiltros] = useState<FiltrosExecucao>(getFiltrosIniciais());
+  const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosExecucao>(getFiltrosIniciais());
   const [page, setPage] = useState(1);
   const [expandido, setExpandido] = useState(true);
   const [slaMin, setSlaMin] = useState(30);
@@ -346,11 +355,13 @@ export const Tela2Execucoes: React.FC = () => {
   const { data: rotinasData }        = useRotinasDisponiveis();
   const { data: slaData }            = useSlaJobs(slaMin);
 
-  const set = (campo: keyof FiltrosExecucao) => (v: string) =>
+  const setStr = (campo: 'data_inicio' | 'data_fim' | 'status') => (v: string) =>
+    setFiltros(prev => ({ ...prev, [campo]: v }));
+  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
 
   const aplicar = () => { setFiltrosAtivos(filtros); setPage(1); };
-  const limpar  = () => { setFiltros(FILTROS_VAZIOS); setFiltrosAtivos(FILTROS_VAZIOS); setPage(1); };
+  const limpar  = () => { setFiltros(getFiltrosIniciais()); setFiltrosAtivos(getFiltrosIniciais()); setPage(1); };
 
   const resumo = graficos?.resumo;
   const totalPag = Math.ceil((data?.total || 0) / 20);
@@ -372,32 +383,56 @@ export const Tela2Execucoes: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
-                         onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
-                         onChange={e => set('job')(e.target.value)} />
-              <FormControl size="small" sx={{ minWidth: 130 }}>
-                <InputLabel>Grupo</InputLabel>
-                <Select value={filtros.grupo} label="Grupo" onChange={e => set('grupo')(e.target.value as string)}>
-                  <MenuItem value=""><em>Todos</em></MenuItem>
-                  {GRUPOS.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 130 }}>
-                <InputLabel>Rotina</InputLabel>
-                <Select value={filtros.rotina} label="Rotina" onChange={e => set('rotina')(e.target.value as string)}>
-                  <MenuItem value=""><em>Todas</em></MenuItem>
-                  {(rotinasData?.rotinas ?? []).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                </Select>
-              </FormControl>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <Autocomplete
+                multiple freeSolo options={[]}
+                value={filtros.tabela ?? []}
+                onChange={(_, v) => setArr('tabela')(v as string[])}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Tabela" size="small" sx={{ minWidth: 200 }} />}
+              />
+              <Autocomplete
+                multiple freeSolo options={[]}
+                value={filtros.job ?? []}
+                onChange={(_, v) => setArr('job')(v as string[])}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Job" size="small" sx={{ minWidth: 200 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={GRUPOS}
+                value={filtros.grupo ?? []}
+                onChange={(_, v) => setArr('grupo')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Grupo" size="small" sx={{ minWidth: 160 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={rotinasData?.rotinas ?? []}
+                value={filtros.rotina ?? []}
+                onChange={(_, v) => setArr('rotina')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Rotina" size="small" sx={{ minWidth: 160 }} />}
+              />
               <TextField label="Data Início" type="date" value={filtros.data_inicio} size="small"
-                         InputLabelProps={{ shrink: true }} onChange={e => set('data_inicio')(e.target.value)} />
+                         InputLabelProps={{ shrink: true }} onChange={e => setStr('data_inicio')(e.target.value)} />
               <TextField label="Data Fim" type="date" value={filtros.data_fim} size="small"
-                         InputLabelProps={{ shrink: true }} onChange={e => set('data_fim')(e.target.value)} />
+                         InputLabelProps={{ shrink: true }} onChange={e => setStr('data_fim')(e.target.value)} />
               <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Status</InputLabel>
-                <Select value={filtros.status} label="Status" onChange={e => set('status')(e.target.value as string)}>
+                <Select value={filtros.status} label="Status" onChange={e => setStr('status')(e.target.value as string)}>
                   <MenuItem value=""><em>Todos</em></MenuItem>
                   <MenuItem value="OK">
                     <Chip label="OK" size="small" color="success" sx={{ pointerEvents: 'none' }} />
@@ -437,8 +472,8 @@ export const Tela2Execucoes: React.FC = () => {
       </Box>
 
       {/* Série temporal — largura total, altura compacta */}
-      <ChartCard title={`Série Temporal de Execuções${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
-        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={160} vw={1120} />
+      <ChartCard title={`Série Temporal de Execuções${filtrosAtivos.job?.[0] ? ` — ${filtrosAtivos.job[0]}` : ''}`}>
+        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job?.[0]} ih={160} vw={1120} />
       </ChartCard>
 
       {/* Gráficos — grid 2 colunas */}

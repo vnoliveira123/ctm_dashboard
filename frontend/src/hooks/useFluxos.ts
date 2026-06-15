@@ -4,10 +4,10 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface FiltrosFluxo {
-  grupo?:         string;
-  tabela?:        string;
-  job?:           string;
-  rotina?:        string;
+  grupo?:         string[];
+  tabela?:        string[];
+  job?:           string[];
+  rotina?:        string[];
   posicao?:       string;
   carga?:         string;
   horario_carga?: string;
@@ -46,10 +46,10 @@ export const useFluxosGrafo = (filtros: FiltrosFluxo = {}, enabled = true) => {
     enabled,
     queryFn: async () => {
       const p = new URLSearchParams();
-      if (filtros.grupo)         p.append('grupo',         filtros.grupo);
-      if (filtros.tabela)        p.append('tabela',        filtros.tabela);
-      if (filtros.job)           p.append('job',           filtros.job);
-      if (filtros.rotina)        p.append('rotina',        filtros.rotina);
+      (filtros.grupo  ?? []).forEach(v => p.append('grupo',  v));
+      (filtros.tabela ?? []).forEach(v => p.append('tabela', v));
+      (filtros.job    ?? []).forEach(v => p.append('job',    v));
+      (filtros.rotina ?? []).forEach(v => p.append('rotina', v));
       if (filtros.posicao)       p.append('posicao',       filtros.posicao);
       if (filtros.carga)         p.append('carga',         filtros.carga);
       if (filtros.horario_carga) p.append('horario_carga', filtros.horario_carga);

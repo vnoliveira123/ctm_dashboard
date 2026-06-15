@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from api.db.database import get_db
 from api.db.queries import get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis, get_sla_jobs
 from api.middleware.cache import get_or_cache
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -28,31 +29,39 @@ async def obter_sla_jobs(
     return get_or_cache(f"cache:execucoes:sla:{sla_minutos}", 300, _fetch)
 
 
+def _default_date_range(data_inicio: Optional[str], data_fim: Optional[str]):
+    if not data_inicio and not data_fim:
+        today = datetime.utcnow().date()
+        return (today - timedelta(days=30)).isoformat(), today.isoformat()
+    return data_inicio, data_fim
+
+
 @router.get("/graficos")
 async def obter_graficos(
-    tabela: Optional[str] = Query(None),
-    job: Optional[str] = Query(None),
-    grupo: Optional[str] = Query(None),
-    rotina: Optional[str] = Query(None),
+    tabela: List[str] = Query(default=[]),
+    job: List[str] = Query(default=[]),
+    grupo: List[str] = Query(default=[]),
+    rotina: List[str] = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
+    data_inicio, data_fim = _default_date_range(data_inicio, data_fim)
     return get_execucoes_graficos(
         db,
-        tabela=tabela, job=job, grupo_prefix=grupo,
-        rotina=rotina, data_inicio=data_inicio, data_fim=data_fim,
+        tabelas=tabela, jobs=job, grupos=grupo,
+        rotinas=rotina, data_inicio=data_inicio, data_fim=data_fim,
         status=status,
     )
 
 
 @router.get("/")
 async def listar_execucoes(
-    tabela: Optional[str] = Query(None),
-    job: Optional[str] = Query(None),
-    grupo: Optional[str] = Query(None),
-    rotina: Optional[str] = Query(None),
+    tabela: List[str] = Query(default=[]),
+    job: List[str] = Query(default=[]),
+    grupo: List[str] = Query(default=[]),
+    rotina: List[str] = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -60,11 +69,12 @@ async def listar_execucoes(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    data_inicio, data_fim = _default_date_range(data_inicio, data_fim)
     skip = (page - 1) * limit
     resultado = get_execucoes(
         db, skip=skip, limit=limit,
-        tabela=tabela, job=job, grupo_prefix=grupo,
-        rotina=rotina, data_inicio=data_inicio, data_fim=data_fim, status=status,
+        tabelas=tabela, jobs=job, grupos=grupo,
+        rotinas=rotina, data_inicio=data_inicio, data_fim=data_fim, status=status,
     )
     return {
         "execucoes": [

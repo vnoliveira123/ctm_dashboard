@@ -1,6 +1,6 @@
 import re
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, case, or_, and_, extract
+from sqlalchemy import desc, func, case, or_, and_, extract, text
 from api.db.models import Processo, Execucao, Fluxo, ProcessoStats, ExecucaoTimeline
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -176,16 +176,16 @@ def get_periodicidades_disponiveis(db: Session) -> List[str]:
 # EXECUÇÕES
 # ══════════════════════════════════════════════════════════════════
 
-def _build_exec_filter(query, tabela=None, job=None, grupo_prefix=None,
-                        rotina=None, data_inicio=None, data_fim=None, status=None):
-    if tabela:
-        query = query.filter(ExecucaoTimeline.tabela.ilike(f'%{tabela}%'))
-    if job:
-        query = query.filter(ExecucaoTimeline.job.ilike(f'%{job}%'))
-    if grupo_prefix:
-        query = query.filter(ExecucaoTimeline.grupo.like(f'{grupo_prefix}-%'))
-    if rotina:
-        query = query.filter(ExecucaoTimeline.tabela.like(f'{rotina}%'))
+def _build_exec_filter(query, tabelas=None, jobs=None, grupos=None,
+                        rotinas=None, data_inicio=None, data_fim=None, status=None):
+    if tabelas:
+        query = query.filter(or_(*[ExecucaoTimeline.tabela.ilike(f'%{t}%') for t in tabelas]))
+    if jobs:
+        query = query.filter(or_(*[ExecucaoTimeline.job.ilike(f'%{j}%') for j in jobs]))
+    if grupos:
+        query = query.filter(or_(*[ExecucaoTimeline.grupo.like(f'{g}-%') for g in grupos]))
+    if rotinas:
+        query = query.filter(func.left(ExecucaoTimeline.tabela, 4).in_(rotinas))
     if data_inicio:
         query = query.filter(ExecucaoTimeline.data_execucao >= data_inicio)
     if data_fim:
@@ -197,52 +197,66 @@ def _build_exec_filter(query, tabela=None, job=None, grupo_prefix=None,
 
 
 def get_execucoes(db: Session, skip=0, limit=20,
-                  tabela=None, job=None, grupo_prefix=None,
-                  rotina=None, data_inicio=None, data_fim=None, status=None):
+                  tabelas=None, jobs=None, grupos=None,
+                  rotinas=None, data_inicio=None, data_fim=None, status=None):
     query = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
     )
     total = query.count()
     execucoes = query.order_by(desc(ExecucaoTimeline.data_execucao)).offset(skip).limit(limit).all()
     return {'execucoes': execucoes, 'total': total}
 
 
-# WHERE reutilizável nas queries ao Continuous Aggregate
-_CAGG_WHERE = """
-    (:tabela    IS NULL OR tabela ILIKE :tabela)
-AND (:job       IS NULL OR job    ILIKE :job)
-AND (:grupo     IS NULL OR grupo  LIKE  :grupo)
-AND (:rotina    IS NULL OR LEFT(tabela, 4) = :rotina)
-AND (:dt_inicio IS NULL OR dia >= :dt_inicio)
-AND (:dt_fim    IS NULL OR dia <  :dt_fim)
-"""
+def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim):
+    """WHERE dinâmico para cagg_execucoes_dia com suporte a múltiplos valores."""
+    parts: list[str] = []
+    params: dict = {}
 
+    if tabelas:
+        subs = ' OR '.join(f'tabela ILIKE :t{i}' for i in range(len(tabelas)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(tabelas):
+            params[f't{i}'] = f'%{v}%'
 
-def _cagg_params(tabela, job, grupo_prefix, rotina, data_inicio, data_fim) -> dict:
-    return {
-        'tabela':    f'%{tabela}%' if tabela else None,
-        'job':       f'%{job}%'    if job    else None,
-        'grupo':     f'{grupo_prefix}-%' if grupo_prefix else None,
-        'rotina':    rotina,
-        'dt_inicio': data_inicio,
-        'dt_fim': (
-            (datetime.fromisoformat(data_fim) + timedelta(days=1)).isoformat()
-            if data_fim else None
-        ),
-    }
+    if jobs:
+        subs = ' OR '.join(f'job ILIKE :j{i}' for i in range(len(jobs)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(jobs):
+            params[f'j{i}'] = f'%{v}%'
+
+    if grupos:
+        subs = ' OR '.join(f'grupo LIKE :g{i}' for i in range(len(grupos)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(grupos):
+            params[f'g{i}'] = f'{v}-%'
+
+    if rotinas:
+        subs = ' OR '.join(f"LEFT(tabela,4) = :r{i}" for i in range(len(rotinas)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(rotinas):
+            params[f'r{i}'] = v
+
+    if data_inicio:
+        parts.append('dia >= :dt_inicio')
+        params['dt_inicio'] = data_inicio
+    if data_fim:
+        parts.append('dia < :dt_fim')
+        params['dt_fim'] = (datetime.fromisoformat(data_fim) + timedelta(days=1)).isoformat()
+
+    return (' AND '.join(parts) if parts else 'TRUE'), params
 
 
 def _graficos_via_cagg(
     db: Session, base,
-    tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+    tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
 ) -> dict:
     """
     Gera os dados dos gráficos consultando o Continuous Aggregate cagg_execucoes_dia.
     Resumo e volume diário são calculados a partir de dados pré-computados, sem
     tocar na hypertable de 58 M linhas. Raises se o cagg não estiver disponível.
     """
-    p = _cagg_params(tabela, job, grupo_prefix, rotina, data_inicio, data_fim)
+    where, params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
 
     # ── Resumo: total/ok/nok/avg_dur do cagg ─────────────────────────────────
     # avg_dur ponderada por volume: SUM(avg_dur * total) / SUM(total)
@@ -254,8 +268,8 @@ def _graficos_via_cagg(
             SUM(avg_dur * total) / NULLIF(SUM(total), 0)     AS avg_dur,
             MAX(max_dur)                                      AS max_dur_global
         FROM cagg_execucoes_dia
-        WHERE {_CAGG_WHERE}
-    """), p).fetchone()
+        WHERE {where}
+    """), params).fetchone()
 
     total_raw = int(res.total or 0)
     ok_raw    = int(res.ok   or 0)
@@ -274,9 +288,9 @@ def _graficos_via_cagg(
     top_job = db.execute(text(f"""
         SELECT job, MAX(max_dur) AS max_dur
         FROM cagg_execucoes_dia
-        WHERE {_CAGG_WHERE} AND max_dur IS NOT NULL
+        WHERE {where} AND max_dur IS NOT NULL
         GROUP BY job ORDER BY max_dur DESC LIMIT 1
-    """), p).fetchone()
+    """), params).fetchone()
 
     # ── Volume por data (pré-computado) ──────────────────────────────────────
     vol_rows = db.execute(text(f"""
@@ -286,11 +300,11 @@ def _graficos_via_cagg(
             SUM(ok)    AS ok,
             SUM(nok)   AS nok
         FROM cagg_execucoes_dia
-        WHERE {_CAGG_WHERE}
+        WHERE {where}
         GROUP BY dia
         HAVING SUM(total) > 0
         ORDER BY dia
-    """), p).fetchall()
+    """), params).fetchall()
 
     def _vol_total(r):
         if status == 'OK':     return int(r.ok  or 0)
@@ -304,11 +318,11 @@ def _graficos_via_cagg(
             SUM(avg_dur * total) / NULLIF(SUM(total), 0)  AS avg_dur,
             MAX(max_dur)                                   AS max_dur
         FROM cagg_execucoes_dia
-        WHERE {_CAGG_WHERE} AND avg_dur IS NOT NULL
+        WHERE {where} AND avg_dur IS NOT NULL
         GROUP BY job
         ORDER BY avg_dur DESC
         LIMIT 10
-    """), p).fetchall()
+    """), params).fetchall()
 
     # ── Por hora: cagg é diário — query no hypertable (mais rápido que na tabela plana)
     hora_rows = (
@@ -435,18 +449,18 @@ def _graficos_via_orm(db: Session, base, status) -> dict:
 
 
 def get_execucoes_graficos(db: Session,
-                            tabela=None, job=None, grupo_prefix=None,
-                            rotina=None, data_inicio=None, data_fim=None,
+                            tabelas=None, jobs=None, grupos=None,
+                            rotinas=None, data_inicio=None, data_fim=None,
                             status=None):
     base = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
     )
 
     # Caminho rápido: Continuous Aggregate (TimescaleDB)
     try:
         graficos = _graficos_via_cagg(
-            db, base, tabela, job, grupo_prefix, rotina, data_inicio, data_fim, status,
+            db, base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
         )
     except Exception:
         # Fallback: queries ORM direto na tabela (sem TimescaleDB ou cagg vazio)
@@ -469,10 +483,10 @@ def get_execucoes_graficos(db: Session,
     if data_fim:
         fim = datetime.fromisoformat(data_fim) + timedelta(days=1)
         isd_base = isd_base.filter(ExecucaoTimeline.data_execucao < fim)
-    if rotina:
-        isd_base = isd_base.filter(ExecucaoTimeline.tabela.like(f'{rotina}%'))
-    if grupo_prefix:
-        isd_base = isd_base.filter(ExecucaoTimeline.grupo.like(f'{grupo_prefix}-%'))
+    if rotinas:
+        isd_base = isd_base.filter(func.left(ExecucaoTimeline.tabela, 4).in_(rotinas))
+    if grupos:
+        isd_base = isd_base.filter(or_(*[ExecucaoTimeline.grupo.like(f'{g}-%') for g in grupos]))
 
     isd_rows = (
         isd_base.group_by(ExecucaoTimeline.job)
@@ -480,8 +494,9 @@ def get_execucoes_graficos(db: Session,
         .all()
     )
 
+    # Série temporal: só disponível quando exatamente 1 job é filtrado
     timeseries = []
-    if job:
+    if jobs and len(jobs) == 1:
         ts_rows = (
             base.with_entities(
                 ExecucaoTimeline.data_execucao,
@@ -676,19 +691,19 @@ def get_rotinas_processos(db: Session) -> List[str]:
 _MAX_GRAPH_NODES = 500
 
 
-def get_fluxos_grafo(db: Session, grupo=None, tabela=None, job=None,
-                     rotina=None, posicao=None, carga=None, horario_carga=None,
+def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
+                     rotinas=None, posicao=None, carga=None, horario_carga=None,
                      controle=None):
     # 1. Filtrar processos
     q = db.query(Processo)
-    if grupo:
-        q = q.filter(Processo.grupo.like(f'{grupo}-%'))
-    if tabela:
-        q = q.filter(Processo.tabela.ilike(f'%{tabela}%'))
-    if job:
-        q = q.filter(Processo.job.ilike(f'%{job}%'))
-    if rotina:
-        q = q.filter(func.left(Processo.tabela, 4) == rotina)
+    if grupos:
+        q = q.filter(or_(*[Processo.grupo.like(f'{g}-%') for g in grupos]))
+    if tabelas:
+        q = q.filter(or_(*[Processo.tabela.ilike(f'%{t}%') for t in tabelas]))
+    if jobs:
+        q = q.filter(or_(*[Processo.job.ilike(f'%{j}%') for j in jobs]))
+    if rotinas:
+        q = q.filter(func.left(Processo.tabela, 4).in_(rotinas))
     if carga:
         q = q.filter(Processo.carga == carga)
     if horario_carga:

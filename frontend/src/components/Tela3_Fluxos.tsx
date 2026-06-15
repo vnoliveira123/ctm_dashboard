@@ -4,6 +4,7 @@ import * as d3 from 'd3';
 import {
   Box, TextField, Button, CircularProgress, Alert, Typography, Paper,
   FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Chip, Tooltip,
+  Autocomplete, Checkbox,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon      from '@mui/icons-material/Clear';
@@ -15,7 +16,7 @@ const NW = 144;   // node width
 const NH = 58;    // node height
 const GRUPOS   = ['PR12', 'PR21', 'PR31', 'PR41'];
 const HORARIOS = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
-const FILTROS_VAZIOS: FiltrosFluxo = { grupo: '', tabela: '', job: '', rotina: '', posicao: '', carga: '', horario_carga: '', controle: '' };
+const FILTROS_VAZIOS: FiltrosFluxo = { grupo: [], tabela: [], job: [], rotina: [], posicao: '', carga: '', horario_carga: '', controle: '' };
 
 const COR: Record<string, string> = {
   inicio: '#2e7d32',
@@ -342,16 +343,23 @@ export const Tela3Fluxos: React.FC = () => {
   const [expandido, setExpandido]         = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const temFiltro = Object.values(filtrosAtivos).some(v => v !== '');
+  const temFiltro = (filtrosAtivos.grupo?.length ?? 0) > 0 ||
+    (filtrosAtivos.tabela?.length ?? 0) > 0 ||
+    (filtrosAtivos.job?.length ?? 0) > 0 ||
+    (filtrosAtivos.rotina?.length ?? 0) > 0 ||
+    !!filtrosAtivos.posicao || !!filtrosAtivos.carga ||
+    !!filtrosAtivos.horario_carga || !!filtrosAtivos.controle;
   const { data, isLoading, error } = useFluxosGrafo(filtrosAtivos, temFiltro);
   const { data: rotinasData }      = useRotinasFluxos();
 
-  const set = (campo: keyof FiltrosFluxo) => (v: string) =>
+  const setStr = (campo: 'posicao' | 'carga' | 'horario_carga' | 'controle') => (v: string) =>
     setFiltros(prev => {
       const next = { ...prev, [campo]: v };
       if (campo === 'carga' && v !== 'SIM') next.horario_carga = '';
       return next;
     });
+  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
+    setFiltros(prev => ({ ...prev, [campo]: v }));
 
   const aplicar = () => setFiltrosAtivos(filtros);
   const limpar  = () => { setFiltros(FILTROS_VAZIOS); setFiltrosAtivos(FILTROS_VAZIOS); };
@@ -422,31 +430,53 @@ export const Tela3Fluxos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
-                         onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
-                         onChange={e => set('job')(e.target.value)} />
-              <FormControl size="small" sx={{ minWidth: 130 }}>
-                <InputLabel>Grupo</InputLabel>
-                <Select value={filtros.grupo} label="Grupo"
-                        onChange={e => set('grupo')(e.target.value as string)}>
-                  <MenuItem value=""><em>Todos</em></MenuItem>
-                  {GRUPOS.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 130 }}>
-                <InputLabel>Rotina</InputLabel>
-                <Select value={filtros.rotina} label="Rotina"
-                        onChange={e => set('rotina')(e.target.value as string)}>
-                  <MenuItem value=""><em>Todas</em></MenuItem>
-                  {(rotinasData?.rotinas ?? []).map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                </Select>
-              </FormControl>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <Autocomplete
+                multiple freeSolo options={[]}
+                value={filtros.tabela ?? []}
+                onChange={(_, v) => setArr('tabela')(v as string[])}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Tabela" size="small" sx={{ minWidth: 200 }} />}
+              />
+              <Autocomplete
+                multiple freeSolo options={[]}
+                value={filtros.job ?? []}
+                onChange={(_, v) => setArr('job')(v as string[])}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Job" size="small" sx={{ minWidth: 200 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={GRUPOS}
+                value={filtros.grupo ?? []}
+                onChange={(_, v) => setArr('grupo')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Grupo" size="small" sx={{ minWidth: 160 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={rotinasData?.rotinas ?? []}
+                value={filtros.rotina ?? []}
+                onChange={(_, v) => setArr('rotina')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Rotina" size="small" sx={{ minWidth: 160 }} />}
+              />
               <FormControl size="small" sx={{ minWidth: 165 }}>
                 <InputLabel>Posição no Fluxo</InputLabel>
                 <Select value={filtros.posicao} label="Posição no Fluxo"
-                        onChange={e => set('posicao')(e.target.value as string)}>
+                        onChange={e => setStr('posicao')(e.target.value as string)}>
                   <MenuItem value=""><em>Todas</em></MenuItem>
                   {Object.entries(COR).map(([pos, cor]) => (
                     <MenuItem key={pos} value={pos}>
@@ -461,7 +491,7 @@ export const Tela3Fluxos: React.FC = () => {
               <FormControl size="small" sx={{ minWidth: 155 }}>
                 <InputLabel>Carga Automática</InputLabel>
                 <Select value={filtros.carga} label="Carga Automática"
-                        onChange={e => set('carga')(e.target.value as string)}>
+                        onChange={e => setStr('carga')(e.target.value as string)}>
                   <MenuItem value=""><em>Todas</em></MenuItem>
                   <MenuItem value="SIM">SIM</MenuItem>
                   <MenuItem value="NAO">NAO</MenuItem>
@@ -471,7 +501,7 @@ export const Tela3Fluxos: React.FC = () => {
                 <FormControl size="small" sx={{ minWidth: 150 }}>
                   <InputLabel>Horário de Carga</InputLabel>
                   <Select value={filtros.horario_carga} label="Horário de Carga"
-                          onChange={e => set('horario_carga')(e.target.value as string)}>
+                          onChange={e => setStr('horario_carga')(e.target.value as string)}>
                     <MenuItem value=""><em>Todos</em></MenuItem>
                     {HORARIOS.map(h => (
                       <MenuItem key={h} value={h}>{h}h</MenuItem>
@@ -482,7 +512,7 @@ export const Tela3Fluxos: React.FC = () => {
               <FormControl size="small" sx={{ minWidth: 175 }}>
                 <InputLabel>Controle</InputLabel>
                 <Select value={filtros.controle} label="Controle"
-                        onChange={e => set('controle')(e.target.value as string)}>
+                        onChange={e => setStr('controle')(e.target.value as string)}>
                   <MenuItem value=""><em>Todos</em></MenuItem>
                   <MenuItem value="efetuado">
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
