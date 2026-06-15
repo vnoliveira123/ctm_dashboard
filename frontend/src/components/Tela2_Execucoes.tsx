@@ -213,10 +213,10 @@ const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
 };
 
 // ── Chart 6: Série temporal do JOB filtrado ───────────────────────────────────
-const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string }> = ({ data, job }) => {
+const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string; ih?: number }> = ({ data, job, ih = 160 }) => {
   if (!job) return <SemDados msg='Aplique o filtro "Job" para ver a série temporal de execuções.' />;
   if (!data.length) return <SemDados msg="Sem execuções para o JOB no período." />;
-  const IH = 160;
+  const IH = ih;
   const dates = data.map(d => new Date(d.data));
   const x = d3.scaleTime().domain(d3.extent(dates) as [Date, Date]).range([0, IW]);
   const y = d3.scaleLinear().domain([0, d3.max(data, d => d.duracao) || 1]).range([IH, 0]).nice();
@@ -374,8 +374,13 @@ export const Tela2Execucoes: React.FC = () => {
           } color="#7b1fa2" />
       </Box>
 
+      {/* Série temporal — largura total, logo após os cards */}
+      <ChartCard title={`Série Temporal de Execuções${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
+        <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} ih={220} />
+      </ChartCard>
+
       {/* Gráficos — grid 2 colunas */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
+      <Grid container spacing={2} sx={{ mt: 2, mb: 3 }}>
         <Grid item xs={12} md={8}>
           <ChartCard title="Volume de Execuções por Data">
             <GraficoVolumeDiario data={graficos?.volume_por_data ?? []} />
@@ -401,11 +406,6 @@ export const Tela2Execucoes: React.FC = () => {
         <Grid item xs={12} md={6}>
           <ChartCard title="Jobs com ISD — Volume de Execuções">
             <GraficoISD data={graficos?.isd_execucoes ?? []} />
-          </ChartCard>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <ChartCard title={`Série Temporal${filtrosAtivos.job ? ` — ${filtrosAtivos.job}` : ''}`}>
-            <GraficoSerie data={graficos?.timeseries ?? []} job={filtrosAtivos.job} />
           </ChartCard>
         </Grid>
       </Grid>
