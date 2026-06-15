@@ -1,38 +1,49 @@
+import re
 import logging
 from sqlalchemy.orm import Session
 from api.db.models import Processo, Fluxo
 
 logger = logging.getLogger(__name__)
 
-def _parse_out_counds(out_counds_raw: str) -> list[tuple[str, str]]:
+# ── Regex para datecodes de condição ─────────────────────────────────────────
+# Tokens conhecidos: JBSTAT (estático/controle), JBODAT, JBPREV, JOBNEXT, JB????
+# JOBNEXT tem 7 chars; os demais JB???? têm 6 chars.
+_DATE_PAT  = r'(?:JOBNEXT|JB[A-Z0-9*]{4})'
+_OUT_RE    = re.compile(rf'(.+?{_DATE_PAT})([+\-])', re.IGNORECASE)
+_IN_RE     = re.compile(rf'.+?{_DATE_PAT}',          re.IGNORECASE)
+_JBSTAT_RE = re.compile(r'JBSTAT', re.IGNORECASE)
+
+
+def _is_jbstat(cond: str) -> bool:
+    """Condição de semáforo estático — não é aresta de fluxo produtivo."""
+    return bool(_JBSTAT_RE.search(cond))
+
+
+def _parse_out_counds(raw: str) -> list[tuple[str, str]]:
     """
-    Parseia OUT_COUNDS e retorna lista de (condicao, sinal).
-    Cada linha tem formato: 'JOB1-JOB2-JBODAT +' ou 'JOB1-JOB2-JBODAT -'
-    Retorna só as linhas com '+' (geração de evento/dependência).
+    Parseia OUT_COUNDS no formato concatenado sem separadores:
+      COND1-JBODAT+COND2-JBSTAT-COND3-JBODAT+
+    Retorna lista de (condicao, sinal).
     """
-    if not out_counds_raw:
+    if not raw:
         return []
-    resultados = []
-    for linha in out_counds_raw.splitlines():
-        linha = linha.strip()
-        if not linha:
-            continue
-        if linha.endswith('+'):
-            condicao = linha[:-1].strip()
-            resultados.append((condicao, '+'))
-        elif linha.endswith('-'):
-            condicao = linha[:-1].strip()
-            resultados.append((condicao, '-'))
-    return resultados
+    return _OUT_RE.findall(raw.strip())
+
+
+def _parse_in_counds(raw: str) -> list[str]:
+    """
+    Parseia IN_COUNDS no mesmo formato concatenado (sem flags +/-).
+    Retorna lista de strings de condição individuais.
+    """
+    if not raw:
+        return []
+    return [m.strip() for m in _IN_RE.findall(raw.strip()) if m.strip()]
 
 
 def gerar_fluxos_automaticos(db: Session) -> int:
     """
     Gera fluxos a partir de OUT_COUNDS/IN_COUNDS dos processos CTM.
-    Lógica:
-      - Para cada processo com OUT_COUNDS contendo '+', identifica a condição gerada.
-      - Busca o processo que tem essa condição em IN_COUNDS.
-      - Cria o fluxo: origem → destino com essa condição.
+    Condições JBSTAT são semáforos de controle e são excluídas das arestas.
     """
     try:
         processos = db.query(Processo).all()
@@ -41,11 +52,8 @@ def gerar_fluxos_automaticos(db: Session) -> int:
         # Índice: condição → processo que a consome (IN_COUNDS)
         indice_in: dict[str, Processo] = {}
         for p in processos:
-            if p.in_counds:
-                # IN_COUNDS é uma única condição por job
-                cond = p.in_counds.strip()
-                if cond:
-                    indice_in[cond] = p
+            for cond in _parse_in_counds(p.in_counds or ''):
+                indice_in.setdefault(cond, p)
 
         # Conjunto de fluxos já existentes para evitar duplicatas
         existentes = set(
@@ -60,7 +68,11 @@ def gerar_fluxos_automaticos(db: Session) -> int:
             for condicao, sinal in _parse_out_counds(origem.out_counds):
                 if sinal != '+':
                     continue
-                destino = indice_in.get(condicao)
+                if _is_jbstat(condicao):
+                    # Semáforo de controle — não cria aresta no grafo de fluxo
+                    logger.debug(f'JBSTAT ignorado: {condicao} (origem: {origem.job})')
+                    continue
+                destino = indice_in.get(condicao.strip())
                 if not destino:
                     continue
                 chave = (origem.job, destino.job, condicao)
@@ -73,9 +85,9 @@ def gerar_fluxos_automaticos(db: Session) -> int:
                     grupo_origem=origem.grupo,
                     tabela_destino=destino.tabela,
                     job_destino=destino.job,
-                    condicao=condicao,
+                    condicao=condicao.strip(),
                     tipo_fluxo='CTM',
-                    descricao=f'{origem.job} -> {destino.job} via {condicao}',
+                    descricao=f'{origem.job} -> {destino.job} via {condicao.strip()}',
                 ))
 
         if novos_fluxos:

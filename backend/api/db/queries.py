@@ -8,6 +8,11 @@ from typing import Optional, List
 # Tabelas de controle: 2 letras + 2 dígitos no início (ex: PA12, PM11, PR21)
 _CONTROL_RE = re.compile(r'^[A-Za-z]{2}\d{2}')
 
+# Detecta datecode de fluxo REAL em IN_COUNDS (qualquer JB???/JOBNEXT exceto JBSTAT)
+_FLOW_IN_RE  = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})', re.IGNORECASE)
+# Detecta adição (+) de condição de fluxo real em OUT_COUNDS
+_FLOW_OUT_RE = re.compile(r'(?:JOBNEXT|JB(?!STAT)[A-Z0-9*]{4})\+', re.IGNORECASE)
+
 
 # ══════════════════════════════════════════════════════════════════
 # PROCESSOS
@@ -469,11 +474,16 @@ def get_stats_dashboard(db: Session):
 # ══════════════════════════════════════════════════════════════════
 
 def _posicao_fluxo(p: Processo) -> str:
-    has_in      = bool(p.in_counds  and p.in_counds.strip())
-    has_out_add = bool(p.out_counds and '+' in p.out_counds)
-    if not has_in:
+    """
+    Classifica a posição do job no fluxo ignorando condições JBSTAT (semáforos
+    de controle de ciclo). Apenas condições datadas (JBODAT, JBPREV, JOBNEXT,
+    JB????) representam dependências reais de fluxo.
+    """
+    has_real_in  = bool(_FLOW_IN_RE.search(p.in_counds  or ''))
+    has_real_out = bool(_FLOW_OUT_RE.search(p.out_counds or ''))
+    if not has_real_in:
         return 'inicio'
-    if not has_out_add:
+    if not has_real_out:
         return 'fim'
     return 'meio'
 
