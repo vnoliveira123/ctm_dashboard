@@ -101,30 +101,40 @@ const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: numbe
 // ── 2. Barras horizontais — Top tabelas por jobs (scroll) ────────────────────
 const GraficoJobsPorTabela: React.FC<{ data: { tabela: string; total_jobs: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const VW = 520; const BH = 16; const GAP = 6; const ML = 100;
-  const xScale = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, VW - ML - 40]);
-  const totalH  = data.length * (BH + GAP);
+  const barH = 20, VW = 520, ML = 100, MR = 32, MT = 8, MB = 8;
+  const IW_G = VW - ML - MR;
+  const IH   = data.length * (barH + 4);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, IW_G]).nice();
+  const y = d3.scaleBand().domain(data.map(d => d.tabela)).range([0, IH]).padding(0.15);
 
   return (
-    <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${VW} ${totalH + 10}`} width="100%" style={{ minHeight: totalH + 10 }}>
-        {data.map((d, i) => {
-          const y  = i * (BH + GAP);
-          const bw = xScale(d.total_jobs);
-          return (
-            <g key={i} transform={`translate(0,${y})`}>
-              <text x={ML - 6} y={BH / 2} textAnchor="end" fontSize={9} fill="#555" dominantBaseline="middle">
-                {trunc(d.tabela, 11)}
-              </text>
-              <rect x={ML} width={bw} height={BH} rx={3} fill="#1976d2" opacity={0.85}>
+    <Box sx={{ aspectRatio: `${VW} / 222`, overflowY: 'auto' }}>
+      <svg viewBox={`0 0 ${VW} ${IH + MT + MB}`} width="100%"
+           style={{ minHeight: IH + MT + MB }}>
+        <g transform={`translate(${ML},${MT})`}>
+          {x.ticks(5).map(t => (
+            <g key={t}>
+              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
+              <text x={x(t)} y={IH + 14} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
+            </g>
+          ))}
+          {data.map(d => (
+            <g key={d.tabela}>
+              <rect x={0} y={y(d.tabela)!} width={x(d.total_jobs)} height={y.bandwidth()}
+                    fill="#1976d2" rx={2} opacity={0.85}>
                 <title>{d.tabela}: {d.total_jobs} jobs</title>
               </rect>
-              <text x={ML + bw + 4} y={BH / 2} fontSize={9} fill="#333" dominantBaseline="middle" fontWeight="bold">
+              <text x={-4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
+                    textAnchor="end" fontSize={10} fill="#555">
+                {trunc(d.tabela, 11)}
+              </text>
+              <text x={x(d.total_jobs) + 4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
+                    fontSize={9} fill="#333" fontWeight="bold">
                 {d.total_jobs}
               </text>
             </g>
-          );
-        })}
+          ))}
+        </g>
       </svg>
     </Box>
   );
