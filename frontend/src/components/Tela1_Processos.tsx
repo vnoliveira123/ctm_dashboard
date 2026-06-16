@@ -211,7 +211,7 @@ const SelectFiltro: React.FC<{
   label: string; value: string; onChange: (v: string) => void;
   opcoes: { value: string; label: string }[]; minWidth?: number;
 }> = ({ label, value, onChange, opcoes, minWidth = 160 }) => (
-  <FormControl size="small" sx={{ minWidth }}>
+  <FormControl size="small" sx={{ minWidth, flexShrink: 0 }}>
     <InputLabel>{label}</InputLabel>
     <Select value={value} label={label} onChange={e => onChange(e.target.value as string)}>
       <MenuItem value=""><em>Todos</em></MenuItem>
@@ -231,7 +231,7 @@ export const Tela1Processos: React.FC = () => {
 
   const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
-  const { data: graficos }         = useGraficosProcessos();
+  const { data: graficos }         = useGraficosProcessos(filtrosAtivos);
   const { data: semExec }          = useJobsSemExecucao(50);
   const { data: alertasNP }        = useAlertasNaoPadrao();
 
@@ -268,37 +268,36 @@ export const Tela1Processos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Linha 1 — campos de texto e selects sem sub-filtro */}
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <TextField label="Tabela" value={filtros.tabela} size="small" sx={{ minWidth: 150 }}
+            {/* Linha única com scroll horizontal — todos os filtros lado a lado */}
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', overflowX: 'auto', pb: 0.5 }}>
+              <TextField label="Tabela" value={filtros.tabela} size="small"
+                         sx={{ minWidth: 140, flexShrink: 0 }}
                          onChange={e => set('tabela')(e.target.value)} />
-              <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
+              <TextField label="Job" value={filtros.job} size="small"
+                         sx={{ minWidth: 140, flexShrink: 0 }}
                          onChange={e => set('job')(e.target.value)} />
               <Autocomplete
                 options={opcoes?.rotinas || []}
                 value={filtros.rotina || null}
                 onChange={(_, v) => set('rotina')(v ?? '')}
                 size="small"
-                sx={{ minWidth: 130 }}
+                sx={{ minWidth: 130, flexShrink: 0 }}
                 renderInput={params => <TextField {...params} label="Rotina" />}
               />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
-                opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={140} />
+                opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={130} />
               <SelectFiltro label="Tipo" value={filtros.tasktype || ''} onChange={set('tasktype')}
-                opcoes={(opcoes?.tasktypes || []).map(t => ({ value: t, label: t }))} minWidth={130} />
+                opcoes={(opcoes?.tasktypes || []).map(t => ({ value: t, label: t }))} minWidth={120} />
               <SelectFiltro label="Periodicidade" value={filtros.periodicidade || ''} onChange={set('periodicidade')}
-                opcoes={(opcoes?.periodicidades || []).map(p => ({ value: p, label: p }))} minWidth={170} />
+                opcoes={(opcoes?.periodicidades || []).map(p => ({ value: p, label: p }))} minWidth={150} />
               <SelectFiltro label="Confirm" value={filtros.confirm || ''} onChange={set('confirm')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={130} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={120} />
               <SelectFiltro label="Memlib" value={filtros.memlib || ''} onChange={set('memlib')}
-                opcoes={MEMLIBS.map(m => ({ value: m, label: m }))} minWidth={220} />
-            </Box>
-            {/* Linha 2 — selects com sub-filtro condicional */}
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <SelectFiltro label="Carga Automática" value={filtros.carga || ''} onChange={set('carga')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={170} />
+                opcoes={MEMLIBS.map(m => ({ value: m, label: m }))} minWidth={200} />
+              <SelectFiltro label="Carga" value={filtros.carga || ''} onChange={set('carga')}
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={110} />
               {filtros.carga === 'SIM' && (
-                <FormControl size="small" sx={{ minWidth: 210 }}>
+                <FormControl size="small" sx={{ minWidth: 180, flexShrink: 0 }}>
                   <InputLabel>Horário de Carga</InputLabel>
                   <Select multiple value={filtros.horarios_carga || []}
                           onChange={e => set('horarios_carga')(e.target.value as string[])}
@@ -314,20 +313,20 @@ export const Tela1Processos: React.FC = () => {
                 </FormControl>
               )}
               <SelectFiltro label="ISD" value={filtros.isd || ''} onChange={set('isd')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={120} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={110} />
               {filtros.isd === 'SIM' && (
-                <SelectFiltro label="Tipo de Evento ISD" value={filtros.evento_isd || ''} onChange={set('evento_isd')}
-                  opcoes={EVENTOS_ISD.map(e => ({ value: e, label: e }))} minWidth={210} />
+                <SelectFiltro label="Evento ISD" value={filtros.evento_isd || ''} onChange={set('evento_isd')}
+                  opcoes={EVENTOS_ISD.map(e => ({ value: e, label: e }))} minWidth={190} />
               )}
               <SelectFiltro label="Alerta" value={filtros.tem_alerta || ''} onChange={set('tem_alerta')}
-                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={130} />
+                opcoes={[{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]} minWidth={120} />
               {filtros.tem_alerta === 'SIM' && (
-                <SelectFiltro label="Padrão de Alerta" value={filtros.padrao || ''} onChange={set('padrao')}
-                  opcoes={[{ value: 'SIM', label: 'Sim (Padrão)' }, { value: 'NAO', label: 'Não (Customizado)' }]} minWidth={190} />
+                <SelectFiltro label="Padrão" value={filtros.padrao || ''} onChange={set('padrao')}
+                  opcoes={[{ value: 'SIM', label: 'Padrão' }, { value: 'NAO', label: 'Customizado' }]} minWidth={150} />
               )}
               {filtros.tem_alerta === 'NAO' && (
-                <SelectFiltro label="Tipo de Alerta" value={filtros.tipo_alerta || ''} onChange={set('tipo_alerta')}
-                  opcoes={TIPOS_ALERTA.map(t => ({ value: t, label: t }))} minWidth={150} />
+                <SelectFiltro label="Tipo Alerta" value={filtros.tipo_alerta || ''} onChange={set('tipo_alerta')}
+                  opcoes={TIPOS_ALERTA.map(t => ({ value: t, label: t }))} minWidth={140} />
               )}
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>

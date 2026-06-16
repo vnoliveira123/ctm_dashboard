@@ -115,36 +115,37 @@ def get_processos(db: Session, skip=0, limit=20,
     return {'processos': processos, 'total': total, 'resumo': resumo}
 
 
-def get_processos_graficos(db: Session):
-    """Dados agregados globais para os gráficos da tela de Processos."""
-    # 1. Jobs por periodicidade
+def get_processos_graficos(db: Session, tabela=None, job=None, rotina=None, grupo_prefix=None,
+                            periodicidade=None, tasktype=None, confirm=None, memlib=None,
+                            carga=None, isd=None, tem_alerta=None):
+    base = _aplicar_filtros_processo(
+        db.query(Processo),
+        tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
+        periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
+        carga=carga, isd=isd, tem_alerta=tem_alerta,
+    )
+
     perio_rows = (
-        db.query(Processo.periodicidade, func.count(Processo.id).label('total'))
+        base.with_entities(Processo.periodicidade, func.count(Processo.id).label('total'))
         .filter(Processo.periodicidade != None)
         .group_by(Processo.periodicidade)
         .order_by(desc('total'))
         .all()
     )
 
-    # 2. Top 15 tabelas por número de jobs
     tabela_rows = (
-        db.query(Processo.tabela, func.count(Processo.id).label('total_jobs'))
+        base.with_entities(Processo.tabela, func.count(Processo.id).label('total_jobs'))
         .group_by(Processo.tabela)
         .order_by(desc('total_jobs'))
         .limit(15)
         .all()
     )
 
-    # 3. Tabelas com/sem carga automática
-    total_tab   = db.query(func.count(func.distinct(Processo.tabela))).scalar() or 0
-    carga_sim   = db.query(func.count(func.distinct(Processo.tabela))).filter(Processo.carga == 'SIM').scalar() or 0
-
-    # 4. Tabelas com/sem ISD
-    isd_sim     = db.query(func.count(func.distinct(Processo.tabela))).filter(Processo.isd == 'SIM').scalar() or 0
-
-    # 5. Jobs com/sem alerta
-    total_jobs  = db.query(func.count(Processo.id)).scalar() or 0
-    alerta_sim  = db.query(func.count(Processo.id)).filter(Processo.tem_alerta == True).scalar() or 0
+    total_tab  = base.with_entities(func.count(func.distinct(Processo.tabela))).scalar() or 0
+    carga_sim  = base.filter(Processo.carga  == 'SIM').with_entities(func.count(func.distinct(Processo.tabela))).scalar() or 0
+    isd_sim    = base.filter(Processo.isd    == 'SIM').with_entities(func.count(func.distinct(Processo.tabela))).scalar() or 0
+    total_jobs = base.with_entities(func.count(Processo.id)).scalar() or 0
+    alerta_sim = base.filter(Processo.tem_alerta == True).with_entities(func.count(Processo.id)).scalar() or 0
 
     return {
         'periodicidades': [

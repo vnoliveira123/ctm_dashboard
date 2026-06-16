@@ -95,14 +95,26 @@ export const useProcessos = (filtros: FiltrosProcesso = {}, page: number = 1) =>
   });
 };
 
-export const useGraficosProcessos = () =>
+export const useGraficosProcessos = (filtros: FiltrosProcesso = {}) =>
   useQuery<GraficosProcessos>({
-    queryKey: ['processos-graficos'],
+    queryKey: ['processos-graficos', filtros],
     queryFn: async () => {
-      const { data } = await axios.get(`${API_URL}/api/processos/graficos`);
+      const params = new URLSearchParams();
+      if (filtros.tabela)        params.append('tabela',        filtros.tabela);
+      if (filtros.job)           params.append('job',           filtros.job);
+      if (filtros.rotina)        params.append('rotina',        filtros.rotina);
+      if (filtros.grupo)         params.append('grupo',         filtros.grupo);
+      if (filtros.periodicidade) params.append('periodicidade', filtros.periodicidade);
+      if (filtros.tasktype)      params.append('tasktype',      filtros.tasktype);
+      if (filtros.confirm)       params.append('confirm',       filtros.confirm);
+      if (filtros.memlib)        params.append('memlib',        filtros.memlib);
+      if (filtros.carga)         params.append('carga',         filtros.carga);
+      if (filtros.isd)           params.append('isd',           filtros.isd);
+      if (filtros.tem_alerta)    params.append('tem_alerta',    filtros.tem_alerta);
+      const { data } = await axios.get(`${API_URL}/api/processos/graficos?${params}`);
       return data;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
   });
 
 export const useFiltrosDisponiveis = () => {

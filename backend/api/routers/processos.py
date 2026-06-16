@@ -25,10 +25,28 @@ async def listar_opcoes_filtro(db: Session = Depends(get_db)):
 
 
 @router.get("/graficos")
-async def obter_graficos_processos(db: Session = Depends(get_db)):
-    return get_or_cache(
-        "cache:processos:graficos", 300,
-        lambda: get_processos_graficos(db),
+async def obter_graficos_processos(
+    tabela: Optional[str] = Query(None),
+    job: Optional[str] = Query(None),
+    rotina: Optional[str] = Query(None),
+    grupo: Optional[str] = Query(None),
+    periodicidade: Optional[str] = Query(None),
+    tasktype: Optional[str] = Query(None),
+    confirm: Optional[str] = Query(None),
+    memlib: Optional[str] = Query(None),
+    carga: Optional[str] = Query(None),
+    isd: Optional[str] = Query(None),
+    tem_alerta: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    tem_alerta_bool = None
+    if tem_alerta == 'SIM':  tem_alerta_bool = True
+    elif tem_alerta == 'NAO': tem_alerta_bool = False
+
+    return get_processos_graficos(
+        db, tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo,
+        periodicidade=periodicidade, tasktype=tasktype, confirm=confirm,
+        memlib=memlib, carga=carga, isd=isd, tem_alerta=tem_alerta_bool,
     )
 
 
