@@ -700,7 +700,7 @@ def get_rotinas_processos(db: Session) -> List[str]:
     return [r.rotina for r in rows if r.rotina]
 
 
-_MAX_GRAPH_NODES = 500
+_MAX_GRAPH_NODES = 1000
 
 
 def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
