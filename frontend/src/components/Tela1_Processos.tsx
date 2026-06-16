@@ -33,7 +33,7 @@ const CORES_PERIOD = [
 ];
 
 const FILTROS_VAZIOS: FiltrosProcesso = {
-  tabela: '', job: '', grupo: '', periodicidade: '', confirm: '', memlib: '',
+  tabela: '', job: '', grupo: '', periodicidade: '', tasktype: '', confirm: '', memlib: '',
   carga: '', horarios_carga: [], isd: '', evento_isd: '',
   tem_alerta: '', padrao: '', tipo_alerta: '',
 };
@@ -276,6 +276,8 @@ export const Tela1Processos: React.FC = () => {
                          onChange={e => set('job')(e.target.value)} />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
                 opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={140} />
+              <SelectFiltro label="Tipo" value={filtros.tasktype || ''} onChange={set('tasktype')}
+                opcoes={(opcoes?.tasktypes || []).map(t => ({ value: t, label: t }))} minWidth={130} />
               <SelectFiltro label="Periodicidade" value={filtros.periodicidade || ''} onChange={set('periodicidade')}
                 opcoes={(opcoes?.periodicidades || []).map(p => ({ value: p, label: p }))} minWidth={170} />
               <SelectFiltro label="Confirm" value={filtros.confirm || ''} onChange={set('confirm')}

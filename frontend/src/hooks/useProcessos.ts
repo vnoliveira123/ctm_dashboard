@@ -8,6 +8,7 @@ export interface FiltrosProcesso {
   job?: string;
   grupo?: string;
   periodicidade?: string;
+  tasktype?: string;
   confirm?: string;
   memlib?: string;
   carga?: string;
@@ -74,6 +75,7 @@ export const useProcessos = (filtros: FiltrosProcesso = {}, page: number = 1) =>
       if (filtros.job) params.append('job', filtros.job);
       if (filtros.grupo) params.append('grupo', filtros.grupo);
       if (filtros.periodicidade) params.append('periodicidade', filtros.periodicidade);
+      if (filtros.tasktype) params.append('tasktype', filtros.tasktype);
       if (filtros.confirm) params.append('confirm', filtros.confirm);
       if (filtros.memlib) params.append('memlib', filtros.memlib);
       if (filtros.carga) params.append('carga', filtros.carga);
@@ -102,7 +104,7 @@ export const useGraficosProcessos = () =>
   });
 
 export const useFiltrosDisponiveis = () => {
-  return useQuery<{ periodicidades: string[] }>({
+  return useQuery<{ periodicidades: string[]; tasktypes: string[] }>({
     queryKey: ['processos-filtros'],
     queryFn: async () => {
       const { data } = await axios.get(`${API_URL}/api/processos/filtros`);

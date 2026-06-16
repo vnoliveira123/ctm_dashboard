@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from api.db.database import get_db
 from api.db.queries import (
     get_processos, get_processos_graficos, get_stats_processo,
-    get_stats_dashboard, get_periodicidades_disponiveis,
+    get_stats_dashboard, get_periodicidades_disponiveis, get_tasktypes_disponiveis,
     get_jobs_sem_execucao, get_alertas_nao_padrao,
 )
 from api.middleware.cache import get_or_cache
@@ -16,7 +16,10 @@ router = APIRouter()
 async def listar_opcoes_filtro(db: Session = Depends(get_db)):
     return get_or_cache(
         "cache:processos:filtros", 600,
-        lambda: {"periodicidades": get_periodicidades_disponiveis(db)},
+        lambda: {
+            "periodicidades": get_periodicidades_disponiveis(db),
+            "tasktypes": get_tasktypes_disponiveis(db),
+        },
     )
 
 
@@ -53,6 +56,7 @@ async def listar_processos(
     job: Optional[str] = Query(None),
     grupo: Optional[str] = Query(None),
     periodicidade: Optional[str] = Query(None),
+    tasktype: Optional[str] = Query(None),
     confirm: Optional[str] = Query(None),
     memlib: Optional[str] = Query(None),
     carga: Optional[str] = Query(None),
@@ -81,7 +85,7 @@ async def listar_processos(
     resultado = get_processos(
         db, skip=skip, limit=limit,
         tabela=tabela, job=job, grupo_prefix=grupo,
-        periodicidade=periodicidade, confirm=confirm, memlib=memlib,
+        periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
         carga=carga, horarios_carga=horarios_list,
         isd=isd, evento_isd=evento_isd,
         tem_alerta=tem_alerta_bool, padrao=padrao, tipo_alerta=tipo_alerta,

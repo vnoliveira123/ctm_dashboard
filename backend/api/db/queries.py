@@ -41,7 +41,7 @@ def _in_conds_list(raw: str) -> list[str]:
 # ══════════════════════════════════════════════════════════════════
 
 def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
-                               periodicidade=None, confirm=None, memlib=None,
+                               periodicidade=None, tasktype=None, confirm=None, memlib=None,
                                carga=None, horarios_carga=None,
                                isd=None, evento_isd=None,
                                tem_alerta=None, padrao=None, tipo_alerta=None):
@@ -53,6 +53,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
         query = query.filter(Processo.grupo.like(f'{grupo_prefix}-%'))
     if periodicidade:
         query = query.filter(Processo.periodicidade == periodicidade)
+    if tasktype:
+        query = query.filter(Processo.tasktype == tasktype)
     if confirm == 'SIM':
         query = query.filter(Processo.confirm == 'Y')
     elif confirm == 'NAO':
@@ -80,13 +82,13 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
 
 def get_processos(db: Session, skip=0, limit=20,
                   tabela=None, job=None, grupo_prefix=None,
-                  periodicidade=None, confirm=None, memlib=None,
+                  periodicidade=None, tasktype=None, confirm=None, memlib=None,
                   carga=None, horarios_carga=None,
                   isd=None, evento_isd=None,
                   tem_alerta=None, padrao=None, tipo_alerta=None):
 
     filtros = dict(tabela=tabela, job=job, grupo_prefix=grupo_prefix,
-                   periodicidade=periodicidade, confirm=confirm, memlib=memlib,
+                   periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
                    carga=carga, horarios_carga=horarios_carga,
                    isd=isd, evento_isd=evento_isd,
                    tem_alerta=tem_alerta, padrao=padrao, tipo_alerta=tipo_alerta)
@@ -169,6 +171,13 @@ def get_periodicidades_disponiveis(db: Session) -> List[str]:
     rows = (db.query(Processo.periodicidade)
             .filter(Processo.periodicidade != None)
             .distinct().order_by(Processo.periodicidade).all())
+    return [r[0] for r in rows if r[0]]
+
+
+def get_tasktypes_disponiveis(db: Session) -> List[str]:
+    rows = (db.query(Processo.tasktype)
+            .filter(Processo.tasktype != None)
+            .distinct().order_by(Processo.tasktype).all())
     return [r[0] for r in rows if r[0]]
 
 
