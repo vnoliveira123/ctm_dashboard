@@ -344,6 +344,8 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 export const Tela2Execucoes: React.FC = () => {
   const [filtros, setFiltros] = useState<FiltrosExecucao>(getFiltrosIniciais());
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosExecucao>(getFiltrosIniciais());
+  const [tabelaInput, setTabelaInput] = useState('');
+  const [jobInput, setJobInput]       = useState('');
   const [page, setPage] = useState(1);
   const [expandido, setExpandido] = useState(true);
   const [slaMin, setSlaMin] = useState(30);
@@ -360,8 +362,17 @@ export const Tela2Execucoes: React.FC = () => {
   const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
 
-  const aplicar = () => { setFiltrosAtivos(filtros); setPage(1); };
-  const limpar  = () => { setFiltros(getFiltrosIniciais()); setFiltrosAtivos(getFiltrosIniciais()); setPage(1); };
+  const aplicar = () => {
+    const f = { ...filtros };
+    if (tabelaInput.trim()) { f.tabela = [...(f.tabela ?? []), tabelaInput.trim()]; setTabelaInput(''); }
+    if (jobInput.trim())    { f.job    = [...(f.job    ?? []), jobInput.trim()];    setJobInput(''); }
+    setFiltrosAtivos(f);
+    setPage(1);
+  };
+  const limpar = () => {
+    setFiltros(getFiltrosIniciais()); setFiltrosAtivos(getFiltrosIniciais());
+    setTabelaInput(''); setJobInput(''); setPage(1);
+  };
 
   const resumo = graficos?.resumo;
   const totalPag = Math.ceil((data?.total || 0) / 20);
@@ -387,20 +398,24 @@ export const Tela2Execucoes: React.FC = () => {
               <Autocomplete
                 multiple freeSolo options={[]}
                 value={filtros.tabela ?? []}
-                onChange={(_, v) => setArr('tabela')(v as string[])}
+                inputValue={tabelaInput}
+                onInputChange={(_, v) => setTabelaInput(v)}
+                onChange={(_, v) => { setArr('tabela')(v as string[]); setTabelaInput(''); }}
                 renderTags={(value, getTagProps) =>
                   value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
                 }
-                renderInput={(params) => <TextField {...params} label="Tabela" size="small" sx={{ minWidth: 200 }} />}
+                renderInput={(params) => <TextField {...params} label="Tabela" size="small" sx={{ minWidth: 200 }} placeholder="Digite e pressione Enter" />}
               />
               <Autocomplete
                 multiple freeSolo options={[]}
                 value={filtros.job ?? []}
-                onChange={(_, v) => setArr('job')(v as string[])}
+                inputValue={jobInput}
+                onInputChange={(_, v) => setJobInput(v)}
+                onChange={(_, v) => { setArr('job')(v as string[]); setJobInput(''); }}
                 renderTags={(value, getTagProps) =>
                   value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
                 }
-                renderInput={(params) => <TextField {...params} label="Job" size="small" sx={{ minWidth: 200 }} />}
+                renderInput={(params) => <TextField {...params} label="Job" size="small" sx={{ minWidth: 200 }} placeholder="Digite e pressione Enter" />}
               />
               <Autocomplete
                 multiple disableCloseOnSelect options={GRUPOS}

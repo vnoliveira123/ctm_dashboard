@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from api.db.models import Processo
 from datetime import datetime
 
@@ -32,21 +33,17 @@ def ingerir_ctm(arquivo_csv: str, db: Session) -> int:
                 logger.error(f'Coluna obrigatoria ausente: {col}')
                 return 0
 
+        # Carga completa: limpa todas as tabelas dependentes antes de recarregar
+        for tbl in ('mat_processos_stats', 'fluxos_processos', 'raw_processos'):
+            db.execute(text(f'TRUNCATE TABLE {tbl} RESTART IDENTITY CASCADE'))
+        db.commit()
+        logger.info('raw_processos (+ dependentes) truncados — carga completa')
+
         # NaN -> None antes de converter para dicts
         df = df.where(pd.notnull(df), None)
 
-        # ── Pré-carregar chaves existentes (uma query) ───────────────────────
-        existing: dict[tuple, int] = {
-            (p.tabela, p.job, p.grupo): p.id
-            for p in db.query(
-                Processo.tabela, Processo.job, Processo.grupo, Processo.id
-            ).all()
-        }
-        logger.info(f'Processos existentes no banco: {len(existing):,}')
-
-        # ── Iterar sobre dicts (muito mais rápido que iterrows) ───────────────
+        # ── Inserção bulk direta (sem upsert — tabela está vazia) ────────────
         insert_maps: list[dict] = []
-        update_maps: list[dict] = []
         _now = datetime.utcnow()
 
         for row in df.to_dict('records'):
@@ -60,7 +57,7 @@ def ingerir_ctm(arquivo_csv: str, db: Session) -> int:
             maxqait_val = int(maxqait_raw) if maxqait_raw and maxqait_raw.isdigit() else None
             tem_alerta  = str(row.get('TEM_ALERTA') or '').strip().upper() == 'SIM'
 
-            campos = {
+            insert_maps.append({
                 'tabela':           tabela,
                 'job':              job,
                 'grupo':            grupo,
@@ -85,30 +82,18 @@ def ingerir_ctm(arquivo_csv: str, db: Session) -> int:
                 'in_counds':        _clean(row.get('IN_COUNDS')),
                 'out_counds':       _clean(row.get('OUT_COUNDS')),
                 'comentario':       _clean(row.get('COMENTARIO')),
+                'data_insercao':    _now,
                 'data_atualizacao': _now,
-            }
+            })
 
-            key = (tabela, job, grupo)
-            if key in existing:
-                campos['id'] = existing[key]
-                update_maps.append(campos)
-            else:
-                campos['data_insercao'] = _now
-                insert_maps.append(campos)
-
-        logger.info(
-            f'CTM: {len(insert_maps):,} novos | {len(update_maps):,} atualizacoes'
-        )
+        logger.info(f'CTM: {len(insert_maps):,} registros a inserir')
 
         if insert_maps:
             db.bulk_insert_mappings(Processo, insert_maps)
-        if update_maps:
-            db.bulk_update_mappings(Processo, update_maps)
 
         db.commit()
-        total = len(insert_maps) + len(update_maps)
-        logger.info(f'CTM ingerido: {total:,} registros')
-        return total
+        logger.info(f'CTM ingerido: {len(insert_maps):,} registros')
+        return len(insert_maps)
 
     except Exception as e:
         logger.error(f'Erro ao ingerir CTM: {e}')

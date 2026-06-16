@@ -1,12 +1,12 @@
 """
-Gerador de LOG sintético — escala de desenvolvimento
-  Período  : 01/05/2026 a 30/05/2026  (30 dias corridos)
-  Jobs      : lidos de CTM.csv  (~68.489 jobs)
-  Volume    : até 1.000.000 linhas (cap)
-  Estimativa: 68.489 jobs × ~6 dias × E[n_exec=2,34] ≈ 960.000 linhas
+Gerador de LOG sintético — escala de desenvolvimento (10%)
+  Período  : 16/05/2026 a 15/06/2026  (30 dias — dentro da janela padrão do dashboard)
+  Jobs      : lidos de CTM.csv  (~6.850 jobs)
+  Volume    : até 100.000 linhas (cap)
+  Estimativa: 6.850 jobs × ~7 dias × E[n_exec=2,34] ≈ 111.000 linhas
 
-Grava em modo streaming → uso de RAM ~30 MB.
-Tempo estimado: < 1 min.
+Grava em modo streaming → uso de RAM < 10 MB.
+Tempo estimado: < 5 s.
 """
 import csv
 import random
@@ -19,12 +19,12 @@ random.seed(99)
 CTM_PATH = Path(__file__).parent / 'csv_input' / 'CTM.csv'
 LOG_PATH  = Path(__file__).parent / 'csv_input' / 'LOG.csv'
 
-# Período: 01/05/2026 a 30/05/2026  (30 dias para gráficos de série temporal)
-START_DATE = datetime(2026, 5, 1)
-END_DATE   = datetime(2026, 5, 30)
-TOTAL_DAYS = (END_DATE - START_DATE).days + 1   # 30
+# Período: 16/05/2026 a 15/06/2026  (últimos 30 dias — dentro da janela padrão do dashboard)
+START_DATE = datetime(2026, 5, 16)
+END_DATE   = datetime(2026, 6, 15)
+TOTAL_DAYS = (END_DATE - START_DATE).days + 1   # 31
 
-MAX_ROWS = 1_000_000
+MAX_ROWS = 100_000
 
 FIELDNAMES = [
     'TABELA', 'JOB', 'GRUPO',
@@ -118,7 +118,7 @@ with open(CTM_PATH, encoding='utf-8', newline='') as f:
 n_jobs = len(jobs)
 print(f'CTM carregado: {n_jobs:,} jobs')
 print(f'Periodo      : {START_DATE:%d/%m/%Y} - {END_DATE:%d/%m/%Y}  ({TOTAL_DAYS} dias)')
-print(f'Volume alvo  : até {MAX_ROWS:,} linhas  (E[n_exec]=2,34 x {n_jobs:,} x {TOTAL_DAYS} dias)')
+print(f'Volume alvo  : até {MAX_ROWS:,} linhas  (E[n_exec]=2,34 × {n_jobs:,} × {TOTAL_DAYS} dias)')
 print(f'Arquivo saída: {LOG_PATH}')
 print()
 

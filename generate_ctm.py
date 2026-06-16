@@ -6,14 +6,14 @@ import string
 random.seed(42)
 
 # ── Alvos ────────────────────────────────────────────────────────────────────
-# 13.807 tabelas × jobs = 68.489 jobs  (metade da escala produtiva)
-#   13.261 tabelas × 5 jobs = 66.305
-#      546 tabelas × 4 jobs =  2.184
-#                              ──────
-#                              68.489 ✓
-N_TABLES      = 13_807
-N_5JOB_TABLES = 13_261
-N_4JOB_TABLES =    546
+# 1.381 tabelas × jobs = 6.850 jobs  (10% da escala produtiva)
+#   1.326 tabelas × 5 jobs = 6.630
+#      55 tabelas × 4 jobs =   220
+#                              ─────
+#                              6.850 ✓
+N_TABLES      = 1_381
+N_5JOB_TABLES = 1_326
+N_4JOB_TABLES =    55
 
 # ── Listas de domínio ─────────────────────────────────────────────────────────
 GRUPOS_PREFIX  = ['PR12', 'PR21', 'PR31', 'PR41']
@@ -138,7 +138,7 @@ OUTPUT_PATH = r'C:\Users\victo\OneDrive\Documentos\Programação\Projetos\log_da
 total_jobs   = 0
 total_tables = 0
 
-print(f'Gerando {N_TABLES:,} tabelas -> {N_5JOB_TABLES:,}x5 + {N_4JOB_TABLES:,}x4 = 68.489 jobs...')
+print(f'Gerando {N_TABLES:,} tabelas -> {N_5JOB_TABLES:,}x5 + {N_4JOB_TABLES:,}x4 = 6.850 jobs...')
 
 with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=FIELDNAMES, delimiter='|')
