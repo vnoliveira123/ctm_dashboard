@@ -15,8 +15,12 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
   useExecucoes, useGraficosExecucoes, useRotinasDisponiveis, useSlaJobs,
+  useDesvioVolumetria, useTendenciaDuracao,
   FiltrosExecucao, VolumeData, TopDurData, HoraData, IsdData, TimeseriesItem, SlaItem,
+  DesvioVolumetriaItem, TendenciaDuracaoItem,
 } from '../hooks/useExecucoes';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import BarChartIcon   from '@mui/icons-material/BarChart';
 
 const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
 
@@ -350,12 +354,18 @@ export const Tela2Execucoes: React.FC = () => {
   const [expandido, setExpandido] = useState(true);
   const [slaMin, setSlaMin] = useState(30);
   const [slaInput, setSlaInput] = useState('30');
-  const [exibirSla, setExibirSla] = useState(false);
+  const [exibirSla, setExibirSla]               = useState(false);
+  const [exibirDesvio, setExibirDesvio]         = useState(false);
+  const [desvioThreshold, setDesvioThreshold]   = useState(50);
+  const [desvioInput, setDesvioInput]           = useState('50');
+  const [exibirTendencia, setExibirTendencia]   = useState(false);
 
   const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
   const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
   const { data: rotinasData }        = useRotinasDisponiveis();
   const { data: slaData }            = useSlaJobs(slaMin);
+  const { data: desvioData }         = useDesvioVolumetria(desvioThreshold);
+  const { data: tendenciaData }      = useTendenciaDuracao();
 
   const setStr = (campo: 'data_inicio' | 'data_fim' | 'status') => (v: string) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
@@ -575,6 +585,126 @@ export const Tela2Execucoes: React.FC = () => {
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{j.max_dur.toFixed(1)}</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{j.total_exec.toLocaleString('pt-BR')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Collapse>
+      </Paper>
+
+      {/* Desvio de Volumetria */}
+      <Paper variant="outlined" sx={{ mb: 3 }}>
+        <Box
+          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', flexWrap: 'wrap' }}
+          onClick={() => setExibirDesvio(v => !v)}
+        >
+          <BarChartIcon fontSize="small" color="warning" />
+          <Typography variant="subtitle2" fontWeight={600}>Desvio de Volumetria — Alertas de Execução</Typography>
+          {desvioData?.alertas.length ? (
+            <Chip label={`${desvioData.alertas.length} job${desvioData.alertas.length !== 1 ? 's' : ''}`} size="small" color="warning" sx={{ ml: 0.5 }} />
+          ) : null}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }} onClick={e => e.stopPropagation()}>
+            <TextField
+              label="Limiar (%)" type="number" size="small" sx={{ width: 110 }}
+              value={desvioInput}
+              onChange={e => setDesvioInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(desvioInput); if (!isNaN(v) && v >= 0) setDesvioThreshold(v); }}
+              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(desvioInput); if (!isNaN(v) && v >= 0) setDesvioThreshold(v); } }}
+              inputProps={{ min: 0, step: 10 }}
+            />
+          </Box>
+          <Typography variant="caption" color="text.secondary">
+            {exibirDesvio ? 'Recolher ▲' : 'Expandir ▼'}
+          </Typography>
+        </Box>
+        <Collapse in={exibirDesvio}>
+          <Divider />
+          {!desvioData?.alertas.length ? (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+              Nenhum job com desvio acima de {desvioThreshold}% nos últimos 7 dias.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'warning.light' }}>
+                    {['Tabela', 'Job', 'Dia', 'Observado', 'Baseline (média)', 'Desvio (%)'].map(c => (
+                      <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(desvioData?.alertas ?? []).map((a: DesvioVolumetriaItem, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{a.dia}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{a.observado}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{a.baseline.toFixed(1)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={`${a.desvio_pct > 0 ? '+' : ''}${a.desvio_pct.toFixed(1)}%`}
+                          size="small"
+                          color={a.desvio_pct > 0 ? 'error' : 'info'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Collapse>
+      </Paper>
+
+      {/* Tendência de Duração */}
+      <Paper variant="outlined" sx={{ mb: 3 }}>
+        <Box
+          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          onClick={() => setExibirTendencia(v => !v)}
+        >
+          <TrendingUpIcon fontSize="small" color="error" />
+          <Typography variant="subtitle2" fontWeight={600}>Tendência de Duração — Jobs com Aumento Semanal</Typography>
+          {tendenciaData?.alertas.length ? (
+            <Chip label={`${tendenciaData.alertas.length} job${tendenciaData.alertas.length !== 1 ? 's' : ''}`} size="small" color="error" sx={{ ml: 0.5 }} />
+          ) : null}
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            {exibirTendencia ? 'Recolher ▲' : 'Expandir ▼'}
+          </Typography>
+        </Box>
+        <Collapse in={exibirTendencia}>
+          <Divider />
+          {!tendenciaData?.alertas.length ? (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+              Nenhum job com tendência de aumento acima de 30% na última semana.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'error.light' }}>
+                    {['Tabela', 'Job', 'Última Semana (min)', 'Histórico (min)', 'Variação', 'Semanas'].map(c => (
+                      <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(tendenciaData?.alertas ?? []).map((a: TendenciaDuracaoItem, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
+                      <TableCell>
+                        <Chip label={`${a.dur_ultima.toFixed(1)} min`} size="small" color="error" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{a.dur_historico.toFixed(1)} min</TableCell>
+                      <TableCell>
+                        <Chip label={`+${a.variacao_pct.toFixed(1)}%`} size="small" color="warning" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {a.semanas.length} semana{a.semanas.length !== 1 ? 's' : ''}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

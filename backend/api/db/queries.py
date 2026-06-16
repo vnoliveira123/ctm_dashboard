@@ -703,6 +703,189 @@ def get_rotinas_processos(db: Session) -> List[str]:
 _MAX_GRAPH_NODES = 1000
 
 
+# ══════════════════════════════════════════════════════════════════
+# DESVIO DE VOLUMETRIA
+# ══════════════════════════════════════════════════════════════════
+
+def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
+    """Compara execuções dos últimos 7 dias vs. média do baseline anterior.
+    Retorna jobs com desvio percentual acima do limiar."""
+    rows = db.execute(text("""
+        WITH max_dia AS (
+            SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
+        ),
+        total_dias AS (
+            SELECT COUNT(DISTINCT dia::date) AS n FROM cagg_execucoes_dia
+        ),
+        corte AS (
+            -- recente = últimos 30% dos dias (min 1, max 7)
+            SELECT GREATEST(1, LEAST(7, ROUND(n * 0.3)::int)) AS janela_recente
+            FROM total_dias
+        ),
+        daily AS (
+            SELECT tabela, job, dia::date AS dia, SUM(total) AS execucoes
+            FROM cagg_execucoes_dia
+            GROUP BY tabela, job, dia::date
+        ),
+        recente AS (
+            SELECT d.tabela, d.job, d.dia, d.execucoes
+            FROM daily d, max_dia m, corte c
+            WHERE d.dia > m.ultimo - c.janela_recente
+        ),
+        historico AS (
+            SELECT d.tabela, d.job, AVG(d.execucoes)::numeric AS media
+            FROM daily d, max_dia m, corte c
+            WHERE d.dia <= m.ultimo - c.janela_recente
+            GROUP BY d.tabela, d.job
+            HAVING COUNT(*) >= 1
+        )
+        SELECT
+            r.tabela, r.job, r.dia::text AS dia, r.execucoes AS observado,
+            ROUND(h.media, 1) AS baseline,
+            ROUND((r.execucoes - h.media) / NULLIF(h.media, 0) * 100, 1) AS desvio_pct
+        FROM recente r
+        JOIN historico h USING (tabela, job)
+        WHERE ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) * 100 >= :threshold
+        ORDER BY ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) DESC
+        LIMIT 200
+    """), {'threshold': threshold_pct}).fetchall()
+
+    return [
+        {
+            'tabela':     r.tabela,
+            'job':        r.job,
+            'dia':        r.dia,
+            'observado':  int(r.observado),
+            'baseline':   float(r.baseline or 0),
+            'desvio_pct': float(r.desvio_pct or 0),
+        }
+        for r in rows
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════
+# TENDÊNCIA DE DURAÇÃO
+# ══════════════════════════════════════════════════════════════════
+
+def get_tendencia_duracao(db: Session) -> list:
+    """Compara duração média da última semana vs. semanas anteriores via time_bucket.
+    Retorna jobs com variação acima de 30%."""
+    from collections import defaultdict
+
+    rows = db.execute(text("""
+        SELECT
+            tabela, job,
+            time_bucket('7 days', dia)::date AS semana,
+            ROUND((SUM(avg_dur * total) / NULLIF(SUM(total), 0))::numeric, 2) AS avg_dur,
+            SUM(total) AS total_exec
+        FROM cagg_execucoes_dia
+        WHERE avg_dur IS NOT NULL AND total > 0
+        GROUP BY tabela, job, time_bucket('7 days', dia)
+        ORDER BY tabela, job, semana
+    """)).fetchall()
+
+    series_map: dict = defaultdict(list)
+    for r in rows:
+        series_map[(r.tabela, r.job)].append({
+            'semana':  str(r.semana),
+            'avg_dur': float(r.avg_dur or 0),
+            'total':   int(r.total_exec),
+        })
+
+    resultado = []
+    for (tabela, job), series in series_map.items():
+        if len(series) < 2:
+            continue
+        dur_ultima = series[-1]['avg_dur']
+        dur_hist   = sum(s['avg_dur'] for s in series[:-1]) / (len(series) - 1)
+        if dur_hist <= 0:
+            continue
+        var_pct = (dur_ultima - dur_hist) / dur_hist * 100
+        if var_pct > 30:
+            resultado.append({
+                'tabela':        tabela,
+                'job':           job,
+                'dur_ultima':    round(dur_ultima, 2),
+                'dur_historico': round(dur_hist,   2),
+                'variacao_pct':  round(var_pct,    1),
+                'semanas':       series,
+            })
+
+    resultado.sort(key=lambda x: x['variacao_pct'], reverse=True)
+    return resultado[:50]
+
+
+# ══════════════════════════════════════════════════════════════════
+# JANELA DE CARGA
+# ══════════════════════════════════════════════════════════════════
+
+def get_janela_carga(db: Session, dias: int = 7) -> list:
+    """Compara horario_carga (CTM) com o primeiro início real da tabela (LOG).
+    Retorna apenas tabelas com carga=SIM e horario_carga numérico definido."""
+    rows = db.execute(text("""
+        WITH max_dia AS (
+            SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
+        ),
+        carga AS (
+            SELECT tabela, MIN(horario_carga::int) AS hora_programada
+            FROM raw_processos
+            WHERE carga = 'SIM'
+              AND horario_carga IS NOT NULL
+              AND horario_carga ~ '^[0-9]+$'
+            GROUP BY tabela
+        ),
+        primeiros AS (
+            SELECT
+                e.tabela,
+                DATE(e.data_execucao) AS dia,
+                MIN(e.data_execucao)  AS primeiro_inicio
+            FROM mat_execucoes_timeline e, max_dia m
+            WHERE DATE(e.data_execucao) > m.ultimo - :dias
+            GROUP BY e.tabela, DATE(e.data_execucao)
+        )
+        SELECT
+            c.tabela,
+            c.hora_programada,
+            p.dia::text AS dia,
+            p.primeiro_inicio,
+            EXTRACT(HOUR   FROM p.primeiro_inicio)::int AS hora_real,
+            EXTRACT(MINUTE FROM p.primeiro_inicio)::int AS min_real,
+            (EXTRACT(HOUR   FROM p.primeiro_inicio) * 60
+             + EXTRACT(MINUTE FROM p.primeiro_inicio)
+             - c.hora_programada * 60)::int AS delta_minutos
+        FROM primeiros p
+        JOIN carga c USING (tabela)
+        ORDER BY tabela, dia
+    """), {'dias': dias}).fetchall()
+
+    def _normalize(delta: int) -> int:
+        """Ajusta delta para cruzamentos de meia-noite: assume que delta > 12h é adiantamento do dia seguinte."""
+        if delta > 720:   return delta - 1440
+        if delta < -720:  return delta + 1440
+        return delta
+
+    def _status(delta: int) -> str:
+        if delta > 30:  return 'atrasada'
+        if delta < -30: return 'adiantada'
+        return 'no_prazo'
+
+    resultado = [
+        {
+            'tabela':          r.tabela,
+            'hora_programada': int(r.hora_programada),
+            'dia':             r.dia,
+            'primeiro_inicio': r.primeiro_inicio.isoformat() if r.primeiro_inicio else None,
+            'hora_real':       int(r.hora_real),
+            'min_real':        int(r.min_real),
+            'delta_minutos':   _normalize(int(r.delta_minutos)),
+            'status':          _status(_normalize(int(r.delta_minutos))),
+        }
+        for r in rows
+    ]
+    resultado.sort(key=lambda x: abs(x['delta_minutos']), reverse=True)
+    return resultado
+
+
 def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
                      rotinas=None, posicao=None, carga=None, horario_carga=None,
                      controle=None):
@@ -807,6 +990,21 @@ def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
             f"O filtro retornou {len(nodes)} nós. "
             f"Refine os filtros (Rotina, Grupo ou Tabela) para exibir no máximo {_MAX_GRAPH_NODES} nós."
         )
+
+    # 8. Último status de execução por nó (label = nome do job)
+    tab_set = list({n['tabela'] for n in nodes})
+    job_set = list({n['label']  for n in nodes})
+    ult_exec = {
+        (r.tabela, r.job): r.status
+        for r in db.execute(text("""
+            SELECT DISTINCT ON (tabela, job) tabela, job, status
+            FROM mat_execucoes_timeline
+            WHERE tabela = ANY(:tabs) AND job = ANY(:jobs)
+            ORDER BY tabela, job, data_execucao DESC
+        """), {'tabs': tab_set, 'jobs': job_set}).fetchall()
+    }
+    for n in nodes:
+        n['ultimo_status'] = ult_exec.get((n['tabela'], n['label']))
 
     node_ids = {n['id'] for n in nodes}
 

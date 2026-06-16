@@ -1,12 +1,32 @@
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.orm import Session
 from api.db.database import get_db
-from api.db.queries import get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis, get_sla_jobs
+from api.db.queries import (
+    get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis, get_sla_jobs,
+    get_desvio_volumetria, get_tendencia_duracao,
+)
 from api.middleware.cache import get_or_cache
 from typing import Optional, List
 from datetime import datetime, timedelta
 
 router = APIRouter()
+
+
+@router.get("/desvio-volumetria")
+async def obter_desvio_volumetria(
+    threshold: float = Query(50.0, ge=0, le=500),
+    db: Session = Depends(get_db),
+):
+    """Jobs com desvio de volume de execuções acima do limiar percentual."""
+    rows = get_desvio_volumetria(db, threshold_pct=threshold)
+    return {"alertas": rows, "threshold_pct": threshold}
+
+
+@router.get("/tendencia-duracao")
+async def obter_tendencia_duracao(db: Session = Depends(get_db)):
+    """Jobs com duração crescente — última semana vs. semanas anteriores."""
+    rows = get_tendencia_duracao(db)
+    return {"alertas": rows}
 
 
 @router.get("/rotinas")

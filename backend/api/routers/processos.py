@@ -5,6 +5,7 @@ from api.db.queries import (
     get_processos, get_processos_graficos, get_stats_processo,
     get_stats_dashboard, get_periodicidades_disponiveis, get_tasktypes_disponiveis,
     get_rotinas_processos, get_jobs_sem_execucao, get_alertas_nao_padrao,
+    get_janela_carga,
 )
 from api.middleware.cache import get_or_cache
 from typing import Optional, List
@@ -59,6 +60,16 @@ async def listar_jobs_sem_execucao(
         jobs = get_jobs_sem_execucao(db, limit=limit)
         return {"jobs": jobs, "total": len(jobs)}
     return get_or_cache(f"cache:processos:sem-execucao:{limit}", 600, _fetch)
+
+
+@router.get("/janela-carga")
+async def obter_janela_carga(
+    dias: int = Query(7, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    """Compara horário de carga programado (CTM) com o primeiro início real de cada tabela."""
+    rows = get_janela_carga(db, dias=dias)
+    return {"janela": rows}
 
 
 @router.get("/alertas-nao-padrao")

@@ -74,18 +74,23 @@ const PosIcon: React.FC<{ posicao: string; cx: number; cy: number }> = ({ posica
 };
 
 // ── Card de nó ────────────────────────────────────────────────────────────────
-const NodeCard: React.FC<{ node: LayoutNode }> = ({ node }) => {
+const NodeCard: React.FC<{ node: LayoutNode; atRisco?: boolean }> = ({ node, atRisco }) => {
   const x   = node.x - NW / 2;
   const y   = node.y - NH / 2;
   const cor = COR[node.posicao] ?? COR.meio;
   const SH  = 20;  // strip height
+
+  const isNok = node.ultimo_status === 'NOT OK';
+  const bordaCor  = isNok ? '#b71c1c' : atRisco ? '#e65100' : cor;
+  const fundoCor  = isNok ? '#ffebee' : atRisco ? '#fff3e0' : 'white';
+  const strokeW   = isNok || atRisco ? 2.5 : 2;
 
   return (
     <g style={{ cursor: 'default' }}>
       {/* Sombra */}
       <rect x={x+2} y={y+2} width={NW} height={NH} rx={5} fill="rgba(0,0,0,0.10)" />
       {/* Corpo */}
-      <rect x={x} y={y} width={NW} height={NH} rx={5} fill="white" stroke={cor} strokeWidth={2} />
+      <rect x={x} y={y} width={NW} height={NH} rx={5} fill={fundoCor} stroke={bordaCor} strokeWidth={strokeW} />
       {/* Ícone posição */}
       <PosIcon posicao={node.posicao} cx={x+16} cy={y+19} />
       {/* Nome do job */}
@@ -120,41 +125,47 @@ const NodeCard: React.FC<{ node: LayoutNode }> = ({ node }) => {
           </text>
         </g>
       )}
+      {/* Indicador de último status (canto inferior esquerdo) */}
+      {node.ultimo_status && (
+        <circle cx={x+8} cy={y+NH-8} r={5}
+          fill={node.ultimo_status === 'OK' ? '#4caf50' : '#c62828'}
+          stroke="white" strokeWidth={1.2} />
+      )}
       {/* Strip inferior com nome da tabela */}
       <rect x={x+2} y={y+NH-SH-2} width={NW-4} height={SH} rx={3} fill="#e64a19" opacity={0.9} />
       <text x={node.x} y={y+NH-SH+8} textAnchor="middle" fontSize={9} fill="white" fontWeight={600} dy="0.2em">
         {trunc(node.tabela, 18)}
       </text>
-      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}${node.controle_efetuado ? '\n✅ Controle efetuado' : ''}${node.suscetivel_controle ? '\n⚠️ Suscetível a controle' : ''}${node.condicoes_orfas.length > 0 ? `\n🔶 ${node.condicoes_orfas.length} condição(ões) sem destino:\n  ${node.condicoes_orfas.join('\n  ')}` : ''}`}</title>
+      <title>{`${node.tabela} / ${node.label}\nGrupo: ${node.grupo}\nPosição: ${LABEL[node.posicao] ?? node.posicao}${node.ultimo_status ? `\nÚltimo status: ${node.ultimo_status}` : ''}${node.carga === 'SIM' ? '\n⚡ Carga automática' : ''}${node.controle_efetuado ? '\n✅ Controle efetuado' : ''}${node.suscetivel_controle ? '\n⚠️ Suscetível a controle' : ''}${node.condicoes_orfas.length > 0 ? `\n🔶 ${node.condicoes_orfas.length} condição(ões) sem destino:\n  ${node.condicoes_orfas.join('\n  ')}` : ''}${atRisco ? '\n⚠️ Dependente de job com falha' : ''}`}</title>
     </g>
   );
 };
 
 // ── Legenda ───────────────────────────────────────────────────────────────────
+const LegendaItem: React.FC<{ cor: string; label: string; forma?: 'circulo' | 'borda' }> = ({ cor, label, forma = 'circulo' }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+    {forma === 'borda'
+      ? <Box sx={{ width: 12, height: 12, borderRadius: 1, border: `2.5px solid ${cor}`, bgcolor: `${cor}22` }} />
+      : <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: cor }} />
+    }
+    <Typography variant="caption" fontWeight={600}>{label}</Typography>
+  </Box>
+);
+
 const Legenda: React.FC = () => (
   <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
     {Object.entries(COR).map(([pos, cor]) => (
-      <Box key={pos} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: cor }} />
-        <Typography variant="caption" fontWeight={600}>{LABEL[pos]}</Typography>
-      </Box>
+      <LegendaItem key={pos} cor={cor} label={LABEL[pos]} />
     ))}
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ff8f00' }} />
-      <Typography variant="caption" fontWeight={600}>Carga automática</Typography>
-    </Box>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2e7d32' }} />
-      <Typography variant="caption" fontWeight={600}>Controle efetuado</Typography>
-    </Box>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#e65100' }} />
-      <Typography variant="caption" fontWeight={600}>Suscetível a controle</Typography>
-    </Box>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#f57f17' }} />
-      <Typography variant="caption" fontWeight={600}>Condição sem destino</Typography>
-    </Box>
+    <LegendaItem cor="#ff8f00" label="Carga automática" />
+    <LegendaItem cor="#2e7d32" label="Controle efetuado" />
+    <LegendaItem cor="#e65100" label="Suscetível a controle" />
+    <LegendaItem cor="#f57f17" label="Condição sem destino" />
+    <Divider orientation="vertical" flexItem />
+    <LegendaItem cor="#c62828" label="NOT OK (último)" forma="borda" />
+    <LegendaItem cor="#e65100" label="Impactado" forma="borda" />
+    <LegendaItem cor="#4caf50" label="Status OK" />
+    <LegendaItem cor="#c62828" label="Status NOT OK" />
   </Box>
 );
 
@@ -373,6 +384,34 @@ export const Tela3Fluxos: React.FC = () => {
     setFiltros(FILTROS_VAZIOS); setFiltrosAtivos(FILTROS_VAZIOS);
     setTabelaInput(''); setJobInput('');
   };
+
+  // ── BFS: nós em risco (downstream de NOT OK) ──────────────────
+  const atRiscoSet = useMemo<Set<string>>(() => {
+    if (!data) return new Set();
+    const adj = new Map<string, string[]>();
+    for (const e of data.edges) {
+      const list = adj.get(e.source) ?? [];
+      list.push(e.target);
+      adj.set(e.source, list);
+    }
+    const nokIds = new Set(
+      data.nodes.filter(n => n.ultimo_status === 'NOT OK').map(n => n.id)
+    );
+    const risco = new Set<string>();
+    const queue = [...nokIds];
+    const visited = new Set<string>(nokIds);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const next of (adj.get(cur) ?? [])) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          risco.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return risco;
+  }, [data]);
 
   // ── Dagre layout (só matemática, sem DOM) ──────────────────────
   const layout = useMemo<Layout | null>(() => {
@@ -605,7 +644,7 @@ export const Tela3Fluxos: React.FC = () => {
                           fill="none" stroke="#90a4ae" strokeWidth={1.5}
                           markerEnd="url(#fl-arrow)" />
                   ))}
-                  {layout?.nodes.map(n => <NodeCard key={n.id} node={n} />)}
+                  {layout?.nodes.map(n => <NodeCard key={n.id} node={n} atRisco={atRiscoSet.has(n.id)} />)}
                 </g>
               </svg>
             </Paper>

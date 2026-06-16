@@ -109,3 +109,43 @@ export const useSlaJobs = (slaMinutos: number) =>
     },
     staleTime: 2 * 60 * 1000,
   });
+
+export interface DesvioVolumetriaItem {
+  tabela:     string;
+  job:        string;
+  dia:        string;
+  observado:  number;
+  baseline:   number;
+  desvio_pct: number;
+}
+
+export const useDesvioVolumetria = (threshold = 50) =>
+  useQuery<{ alertas: DesvioVolumetriaItem[]; threshold_pct: number }>({
+    queryKey: ['execucoes-desvio-volumetria', threshold],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        `${API_URL}/api/execucoes/desvio-volumetria?threshold=${threshold}`,
+      );
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+export interface TendenciaDuracaoItem {
+  tabela:        string;
+  job:           string;
+  dur_ultima:    number;
+  dur_historico: number;
+  variacao_pct:  number;
+  semanas:       { semana: string; avg_dur: number; total: number }[];
+}
+
+export const useTendenciaDuracao = () =>
+  useQuery<{ alertas: TendenciaDuracaoItem[] }>({
+    queryKey: ['execucoes-tendencia-duracao'],
+    queryFn: async () => {
+      const { data } = await axios.get(`${API_URL}/api/execucoes/tendencia-duracao`);
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });

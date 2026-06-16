@@ -16,9 +16,10 @@ import AccountTreeIcon         from '@mui/icons-material/AccountTree';
 import PowerOffIcon            from '@mui/icons-material/PowerOff';
 import {
   useProcessos, useFiltrosDisponiveis, useGraficosProcessos,
-  useJobsSemExecucao, useAlertasNaoPadrao,
-  FiltrosProcesso, JobSemExecucao, AlertaNaoPadrao,
+  useJobsSemExecucao, useAlertasNaoPadrao, useJanelaCarga,
+  FiltrosProcesso, JobSemExecucao, AlertaNaoPadrao, JanelaCargaItem,
 } from '../hooks/useProcessos';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const GRUPOS      = ['PR12', 'PR21', 'PR31', 'PR41'];
@@ -236,14 +237,16 @@ export const Tela1Processos: React.FC = () => {
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosProcesso>(FILTROS_VAZIOS);
   const [page, setPage]                   = useState(1);
   const [expandido, setExpandido]         = useState(true);
-  const [exibirSemExec, setExibirSemExec]   = useState(false);
-  const [exibirAlertasNP, setExibirAlertasNP] = useState(false);
+  const [exibirSemExec, setExibirSemExec]       = useState(false);
+  const [exibirAlertasNP, setExibirAlertasNP]   = useState(false);
+  const [exibirJanela, setExibirJanela]         = useState(false);
 
   const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
   const { data: graficos }         = useGraficosProcessos(filtrosAtivos);
   const { data: semExec }          = useJobsSemExecucao(50);
   const { data: alertasNP }        = useAlertasNaoPadrao();
+  const { data: janelaData }       = useJanelaCarga(7);
 
   const set = (campo: keyof FiltrosProcesso) => (valor: any) => {
     setFiltros(prev => {
@@ -520,6 +523,79 @@ export const Tela1Processos: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* ── Janela de Carga ── */}
+      <Paper variant="outlined" sx={{ mb: 3 }}>
+        <Box
+          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          onClick={() => setExibirJanela(v => !v)}
+        >
+          <AccessTimeIcon fontSize="small" color="primary" />
+          <Typography variant="subtitle2" fontWeight={600}>Janela de Carga — Análise de Pontualidade</Typography>
+          {janelaData?.janela && (
+            <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
+              {(() => {
+                const atrasadas  = janelaData.janela.filter(j => j.status === 'atrasada').length;
+                const adiantadas = janelaData.janela.filter(j => j.status === 'adiantada').length;
+                return (
+                  <>
+                    {atrasadas  > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`}  size="small" color="error" />}
+                    {adiantadas > 0 && <Chip label={`${adiantadas} adiantada${adiantadas !== 1 ? 's' : ''}`} size="small" color="info" />}
+                  </>
+                );
+              })()}
+            </Box>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            {exibirJanela ? 'Recolher ▲' : 'Expandir ▼'}
+          </Typography>
+        </Box>
+        <Collapse in={exibirJanela}>
+          <Divider />
+          {!janelaData?.janela.length ? (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+              Nenhuma tabela com carga programada encontrada nos últimos 7 dias.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'primary.main' }}>
+                    {['Tabela', 'Horário CTM', 'Dia', 'Primeiro Início Real', 'Atraso / Adiantamento', 'Situação'].map(c => (
+                      <TableCell key={c} sx={{ color: 'white', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => {
+                    const sinal = j.delta_minutos >= 0 ? '+' : '';
+                    return (
+                      <TableRow key={i} hover>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>
+                          {String(j.hora_real).padStart(2, '0')}:{String(j.min_real).padStart(2, '0')}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>
+                          {sinal}{j.delta_minutos} min
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={j.status === 'no_prazo' ? 'No Prazo' : j.status === 'atrasada' ? 'Atrasada' : 'Adiantada'}
+                            size="small"
+                            color={j.status === 'no_prazo' ? 'success' : j.status === 'atrasada' ? 'error' : 'info'}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Collapse>
+      </Paper>
 
       {/* ── Tabela ── */}
       {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>}

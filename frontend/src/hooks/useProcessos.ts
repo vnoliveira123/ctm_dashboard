@@ -167,3 +167,26 @@ export const useAlertasNaoPadrao = () =>
     },
     staleTime: 5 * 60 * 1000,
   });
+
+export interface JanelaCargaItem {
+  tabela:          string;
+  hora_programada: number;
+  dia:             string;
+  primeiro_inicio: string;
+  hora_real:       number;
+  min_real:        number;
+  delta_minutos:   number;
+  status:          'no_prazo' | 'atrasada' | 'adiantada';
+}
+
+export const useJanelaCarga = (dias = 7) =>
+  useQuery<{ janela: JanelaCargaItem[] }>({
+    queryKey: ['processos-janela-carga', dias],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        `${API_URL}/api/processos/janela-carga?dias=${dias}`,
+      );
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });

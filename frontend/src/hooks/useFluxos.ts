@@ -27,6 +27,7 @@ export interface GrafoNode {
   controle_efetuado:    boolean;
   suscetivel_controle:  boolean;
   condicoes_orfas:      string[];
+  ultimo_status:        string | null;
 }
 
 export interface GrafoEdge {
