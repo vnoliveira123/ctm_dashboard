@@ -4,7 +4,7 @@ import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, TextField, Button, CircularProgress, Alert, Pagination, Card,
   CardContent, Typography, Chip, FormControl, InputLabel, Select, MenuItem,
-  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid,
+  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid, Autocomplete,
 } from '@mui/material';
 import FilterListIcon          from '@mui/icons-material/FilterList';
 import ClearIcon               from '@mui/icons-material/Clear';
@@ -33,7 +33,7 @@ const CORES_PERIOD = [
 ];
 
 const FILTROS_VAZIOS: FiltrosProcesso = {
-  tabela: '', job: '', grupo: '', periodicidade: '', tasktype: '', confirm: '', memlib: '',
+  tabela: '', job: '', rotina: '', grupo: '', periodicidade: '', tasktype: '', confirm: '', memlib: '',
   carga: '', horarios_carga: [], isd: '', evento_isd: '',
   tem_alerta: '', padrao: '', tipo_alerta: '',
 };
@@ -274,6 +274,14 @@ export const Tela1Processos: React.FC = () => {
                          onChange={e => set('tabela')(e.target.value)} />
               <TextField label="Job" value={filtros.job} size="small" sx={{ minWidth: 150 }}
                          onChange={e => set('job')(e.target.value)} />
+              <Autocomplete
+                options={opcoes?.rotinas || []}
+                value={filtros.rotina || null}
+                onChange={(_, v) => set('rotina')(v ?? '')}
+                size="small"
+                sx={{ minWidth: 130 }}
+                renderInput={params => <TextField {...params} label="Rotina" />}
+              />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
                 opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={140} />
               <SelectFiltro label="Tipo" value={filtros.tasktype || ''} onChange={set('tasktype')}

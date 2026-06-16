@@ -4,7 +4,7 @@ from api.db.database import get_db
 from api.db.queries import (
     get_processos, get_processos_graficos, get_stats_processo,
     get_stats_dashboard, get_periodicidades_disponiveis, get_tasktypes_disponiveis,
-    get_jobs_sem_execucao, get_alertas_nao_padrao,
+    get_rotinas_processos, get_jobs_sem_execucao, get_alertas_nao_padrao,
 )
 from api.middleware.cache import get_or_cache
 from typing import Optional, List
@@ -19,6 +19,7 @@ async def listar_opcoes_filtro(db: Session = Depends(get_db)):
         lambda: {
             "periodicidades": get_periodicidades_disponiveis(db),
             "tasktypes": get_tasktypes_disponiveis(db),
+            "rotinas": get_rotinas_processos(db),
         },
     )
 
@@ -54,6 +55,7 @@ async def listar_alertas_nao_padrao(db: Session = Depends(get_db)):
 async def listar_processos(
     tabela: Optional[str] = Query(None),
     job: Optional[str] = Query(None),
+    rotina: Optional[str] = Query(None),
     grupo: Optional[str] = Query(None),
     periodicidade: Optional[str] = Query(None),
     tasktype: Optional[str] = Query(None),
@@ -84,7 +86,7 @@ async def listar_processos(
 
     resultado = get_processos(
         db, skip=skip, limit=limit,
-        tabela=tabela, job=job, grupo_prefix=grupo,
+        tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo,
         periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
         carga=carga, horarios_carga=horarios_list,
         isd=isd, evento_isd=evento_isd,

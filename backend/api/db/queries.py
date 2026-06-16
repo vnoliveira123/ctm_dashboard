@@ -40,7 +40,7 @@ def _in_conds_list(raw: str) -> list[str]:
 # PROCESSOS
 # ══════════════════════════════════════════════════════════════════
 
-def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
+def _aplicar_filtros_processo(query, tabela=None, job=None, rotina=None, grupo_prefix=None,
                                periodicidade=None, tasktype=None, confirm=None, memlib=None,
                                carga=None, horarios_carga=None,
                                isd=None, evento_isd=None,
@@ -49,6 +49,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
         query = query.filter(Processo.tabela.ilike(f'%{tabela}%'))
     if job:
         query = query.filter(Processo.job.ilike(f'%{job}%'))
+    if rotina:
+        query = query.filter(func.left(Processo.tabela, 4) == rotina)
     if grupo_prefix:
         query = query.filter(Processo.grupo.like(f'{grupo_prefix}-%'))
     if periodicidade:
@@ -81,13 +83,13 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, grupo_prefix=None,
 
 
 def get_processos(db: Session, skip=0, limit=20,
-                  tabela=None, job=None, grupo_prefix=None,
+                  tabela=None, job=None, rotina=None, grupo_prefix=None,
                   periodicidade=None, tasktype=None, confirm=None, memlib=None,
                   carga=None, horarios_carga=None,
                   isd=None, evento_isd=None,
                   tem_alerta=None, padrao=None, tipo_alerta=None):
 
-    filtros = dict(tabela=tabela, job=job, grupo_prefix=grupo_prefix,
+    filtros = dict(tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
                    periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
                    carga=carga, horarios_carga=horarios_carga,
                    isd=isd, evento_isd=evento_isd,

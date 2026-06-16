@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 export interface FiltrosProcesso {
   tabela?: string;
   job?: string;
+  rotina?: string;
   grupo?: string;
   periodicidade?: string;
   tasktype?: string;
@@ -73,6 +74,7 @@ export const useProcessos = (filtros: FiltrosProcesso = {}, page: number = 1) =>
       const params = new URLSearchParams();
       if (filtros.tabela) params.append('tabela', filtros.tabela);
       if (filtros.job) params.append('job', filtros.job);
+      if (filtros.rotina) params.append('rotina', filtros.rotina);
       if (filtros.grupo) params.append('grupo', filtros.grupo);
       if (filtros.periodicidade) params.append('periodicidade', filtros.periodicidade);
       if (filtros.tasktype) params.append('tasktype', filtros.tasktype);
@@ -104,7 +106,7 @@ export const useGraficosProcessos = () =>
   });
 
 export const useFiltrosDisponiveis = () => {
-  return useQuery<{ periodicidades: string[]; tasktypes: string[] }>({
+  return useQuery<{ periodicidades: string[]; tasktypes: string[]; rotinas: string[] }>({
     queryKey: ['processos-filtros'],
     queryFn: async () => {
       const { data } = await axios.get(`${API_URL}/api/processos/filtros`);
