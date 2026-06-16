@@ -55,7 +55,7 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 // ── 1. Pizza — Periodicidades ─────────────────────────────────────────────────
 const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const R = 100; const IR = 56; const CX = 130; const CY = 120;
+  const R = 100; const IR = 56; const CX = 190; const CY = 120;
   const VW = 560; const VH = 260;
   const pie   = d3.pie<{ periodicidade: string; total: number }>().value(d => d.total).sort(null);
   const arc   = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(IR).outerRadius(R);
@@ -88,7 +88,7 @@ const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: numbe
           <g key={i} transform={`translate(0,${i * 22})`}>
             <rect width={12} height={12} rx={2} fill={CORES_PERIOD[i % CORES_PERIOD.length]} />
             <text x={18} y={10} fontSize={11} fill="#444">{d.periodicidade}</text>
-            <text x={VW - CX - R - 24 - 8} y={10} fontSize={11} fill="#888" fontWeight="bold" textAnchor="end">
+            <text x={180} y={10} fontSize={11} fill="#888" fontWeight="bold" textAnchor="end">
               {d.total}
             </text>
           </g>

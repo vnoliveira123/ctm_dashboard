@@ -135,7 +135,7 @@ const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
 const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
   const total = ok + nok;
   if (!total) return <SemDados />;
-  const R = 80, RI = 48, CX = 140, CY = 100, VW = 560, VH = 222;
+  const R = 80, RI = 48, CX = 230, CY = 100, VW = 560, VH = 222;
   const pieData = d3.pie<{ label: string; value: number; color: string }>().value(d => d.value)([
     { label: 'OK',     value: ok,  color: '#4caf50' },
     { label: 'NOT OK', value: nok, color: '#f44336' },
