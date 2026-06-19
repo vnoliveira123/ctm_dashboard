@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(py --version)",
+      "Bash(docker cp *)",
+      "Bash(docker exec *)",
+      "Bash(curl -s \"http://localhost:8000/api/processos?grupo=PR12&carga=SIM&limit=3\")",
+      "Bash(python -m json.tool)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(docker cp \"C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programa��o\\\\Projetos\\\\log_dashboard\\\\csv_input\\\\LOG.csv\" log_dashboard-backend-1:/app/csv_input/LOG.csv)",
+      "Bash(grep -v \"^$\")",
+      "Bash(docker compose *)",
+      "Bash(curl -s \"http://localhost:8000/api/processos/sem-execucao?limit=5\")",
+      "Bash(curl -s \"http://localhost:8000/api/processos/alertas-nao-padrao\")",
+      "Bash(curl -s \"http://localhost:8000/api/execucoes/sla?sla_minutos=30\")",
+      "Bash(curl -s \"http://localhost:8000/api/execucoes/graficos\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d['por_hora'][:3]\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(git -C \"C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programação\\\\Projetos\\\\log_dashboard\" add frontend/src/components/Tela1_Processos.tsx frontend/src/components/Tela2_Execucoes.tsx)",
+      "Bash(git -C 'C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programação\\\\Projetos\\\\log_dashboard' commit -m ' *)",
+      "Bash(git -C \"C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programação\\\\Projetos\\\\log_dashboard\" add frontend/src/components/Tela1_Processos.tsx)",
+      "Bash(git -C \"C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programação\\\\Projetos\\\\log_dashboard\" add frontend/src/components/Tela2_Execucoes.tsx frontend/src/components/Tela3_Fluxos.tsx)",
+      "Bash(git -C \"C:\\\\Users\\\\victo\\\\OneDrive\\\\Documentos\\\\Programação\\\\Projetos\\\\log_dashboard\" add backend/api/db/queries.py frontend/src/components/Tela2_Execucoes.tsx)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(python csv_input/gerar_dados_teste.py)",
+      "Bash(docker-compose exec *)",
+      "Bash(docker-compose restart *)",
+      "Bash(python generate_ctm.py)",
+      "Bash(python -c \"import os; sz=os.path.getsize\\('csv_input/CTM.csv'\\); print\\(f'CTM.csv: {sz/1024/1024:.1f} MB / {sum\\(1 for _ in open\\(\\\\\"csv_input/CTM.csv\\\\\", encoding=\\\\\"utf-8\\\\\"\\)\\)-1:,} linhas'\\)\")",
+      "Bash(python generate_log.py)"
+    ]
+  }
+}
