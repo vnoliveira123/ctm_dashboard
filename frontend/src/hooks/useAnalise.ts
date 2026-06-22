@@ -125,6 +125,72 @@ export const useCenarios = () =>
     },
   });
 
+export interface CaminhoItem {
+  tabela:              string;
+  job:                 string;
+  is_origem:           boolean;
+  is_destino:          boolean;
+  tem_dados:           boolean;
+  expected_start_min:  number;
+  expected_end_min:    number;
+  expected_start:      string;
+  expected_end:        string;
+  predicted_start_min: number;
+  predicted_end_min:   number;
+  predicted_start:     string;
+  predicted_end:       string;
+  delay_propagado:     number;
+  duracao_esperada:    number;
+  duracao_prevista:    number;
+  criticidade:         Criticidade;
+  n_amostras:          number;
+  metodo:              string;
+}
+
+export interface CaminhoCriticoResponse {
+  encontrado:    boolean;
+  caminho:       CaminhoItem[];
+  n_hops:        number;
+  objetivo:      CaminhoItem | null;
+  delay_inicial: number;
+  percentil:     number;
+  data_ref:      string;
+  mensagem?:     string;
+}
+
+export interface CaminhoCriticoParams {
+  tab_origem:  string;
+  job_origem:  string;
+  tab_destino: string;
+  job_destino: string;
+  delay:       number;
+  data:        string;
+  cenario:     string;
+}
+
+export const useCaminhoCritico = (params: CaminhoCriticoParams | null) =>
+  useQuery<CaminhoCriticoResponse>({
+    queryKey:  ['analise-caminho', params],
+    enabled:   params !== null,
+    staleTime: 0,
+    queryFn:   async () => {
+      if (!params) throw new Error('sem params');
+      const p = new URLSearchParams({
+        tab_origem:  params.tab_origem,
+        job_origem:  params.job_origem,
+        tab_destino: params.tab_destino,
+        job_destino: params.job_destino,
+        delay:       String(params.delay),
+        data:        params.data,
+        cenario:     params.cenario,
+      });
+      const { data } = await axios.get<CaminhoCriticoResponse>(
+        `${API_URL}/api/analise/caminho-critico?${p}`,
+      );
+      return data;
+    },
+  });
+
 export const useBuscarJobs = (q: string) =>
   useQuery<{ jobs: JobBusca[] }>({
     queryKey:  ['analise-buscar-jobs', q],

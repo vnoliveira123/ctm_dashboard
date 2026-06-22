@@ -6,6 +6,7 @@ from api.db.queries import (
     get_historico_job_duracao,
     get_inicio_medio_jobs_batch,
     get_fluxos_downstream,
+    get_caminho_entre_jobs,
     buscar_jobs,
 )
 from api.ml.predictor import DurationPredictor
@@ -29,6 +30,95 @@ def _min_to_hhmm(m: float) -> str:
     m_int = int(round(m)) % 1440
     h, mn = divmod(m_int, 60)
     return f"{h:02d}:{mn:02d}"
+
+
+@router.get("/caminho-critico")
+async def caminho_critico(
+    tab_origem:  str   = Query(...),
+    job_origem:  str   = Query(...),
+    tab_destino: str   = Query(...),
+    job_destino: str   = Query(...),
+    delay:       float = Query(..., ge=0, le=1440),
+    data:        str   = Query(None),
+    cenario:     str   = Query('normal'),
+    db: Session = Depends(get_db),
+):
+    """Calcula o impacto de atraso de um job específico sobre um job objetivo,
+    encontrando o caminho mais curto entre eles no grafo de fluxos."""
+    percentil = CENARIO_PERCENTIL.get(cenario, 50)
+    data_ref  = date.fromisoformat(data) if data else date.today()
+
+    path = get_caminho_entre_jobs(db, tab_origem, job_origem, tab_destino, job_destino)
+
+    if path is None:
+        return {
+            'encontrado': False,
+            'caminho':    [],
+            'n_hops':     0,
+            'objetivo':   None,
+            'mensagem':   (
+                f'Nenhum caminho encontrado de {job_origem} para {job_destino}. '
+                'Verifique se os jobs estão conectados no grafo de fluxos.'
+            ),
+        }
+
+    start_times = get_inicio_medio_jobs_batch(db, path)
+
+    resultado = []
+    for job_key in path:
+        t, j      = job_key
+        hist      = get_historico_job_duracao(db, t, j)
+        pred      = DurationPredictor().fit(hist)
+
+        norm_start = start_times.get(job_key, 0.0)
+        dur_p50    = pred.predict(data_ref, 50)
+        dur_pred   = pred.predict(data_ref, percentil)
+
+        p_start  = norm_start + delay
+        p_end    = p_start + dur_pred
+        norm_end = norm_start + dur_p50
+
+        tem_dados = pred.n_samples > 0
+
+        criticidade = 'ok'
+        if delay > 60:
+            criticidade = 'critico'
+        elif delay > 30:
+            criticidade = 'atencao'
+        elif delay > 0:
+            criticidade = 'leve'
+
+        resultado.append({
+            'tabela':              t,
+            'job':                 j,
+            'is_origem':           job_key == path[0],
+            'is_destino':          job_key == path[-1],
+            'tem_dados':           tem_dados,
+            'expected_start_min':  round(norm_start, 1),
+            'expected_end_min':    round(norm_end,   1),
+            'expected_start':      _min_to_hhmm(norm_start) if tem_dados else '--:--',
+            'expected_end':        _min_to_hhmm(norm_end)   if tem_dados else '--:--',
+            'predicted_start_min': round(p_start, 1),
+            'predicted_end_min':   round(p_end,   1),
+            'predicted_start':     _min_to_hhmm(p_start) if tem_dados else '--:--',
+            'predicted_end':       _min_to_hhmm(p_end)   if tem_dados else '--:--',
+            'delay_propagado':     round(delay),
+            'duracao_esperada':    round(dur_p50, 1),
+            'duracao_prevista':    round(dur_pred, 1),
+            'criticidade':         criticidade,
+            'n_amostras':          pred.n_samples,
+            'metodo':              pred.method,
+        })
+
+    return {
+        'encontrado':    True,
+        'caminho':       resultado,
+        'n_hops':        len(path) - 1,
+        'objetivo':      resultado[-1] if resultado else None,
+        'delay_inicial': delay,
+        'percentil':     percentil,
+        'data_ref':      str(data_ref),
+    }
 
 
 @router.get("/cenarios")

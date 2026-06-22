@@ -3,16 +3,21 @@ import {
   Box, Typography, Paper, Button, TextField, MenuItem, Select,
   FormControl, InputLabel, Chip, CircularProgress, Alert,
   Autocomplete, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Tooltip, Divider, Grid,
+  TableHead, TableRow, Tooltip, Divider, Grid, Accordion,
+  AccordionSummary, AccordionDetails,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import BoltIcon from '@mui/icons-material/Bolt';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   useSimulacao, useHistoricoJob, useCenarios, useBuscarJobs,
-  SimulacaoItem, JobBusca, SimulacaoParams,
+  useCaminhoCritico,
+  SimulacaoItem, JobBusca, SimulacaoParams, CaminhoItem, CaminhoCriticoParams,
 } from '../hooks/useAnalise';
 
 // ── Constantes de cor ─────────────────────────────────────────────────────────
@@ -345,6 +350,305 @@ const TabelaImpacto: React.FC<{ items: SimulacaoItem[] }> = ({ items }) => (
   </TableContainer>
 );
 
+// ── Análise Direta: Job em Processamento → Job Objetivo ───────────────────────
+
+const JobCard: React.FC<{ item: CaminhoItem }> = ({ item }) => {
+  const color = CRIT_COLOR[item.criticidade];
+  const isBg  = CRIT_BG[item.criticidade];
+
+  return (
+    <Paper variant="outlined" sx={{
+      p: 1.5, minWidth: 148, maxWidth: 160, flexShrink: 0,
+      borderColor: item.is_destino ? color : item.is_origem ? '#1976d2' : 'divider',
+      borderWidth: (item.is_destino || item.is_origem) ? 2 : 1,
+      bgcolor:     item.is_destino ? isBg : item.is_origem ? '#e3f2fd' : 'white',
+    }}>
+      <Typography variant="caption" fontWeight={700} display="block" noWrap
+        title={item.job}
+        sx={{ color: item.is_destino ? color : item.is_origem ? '#1976d2' : 'text.primary' }}>
+        {item.is_origem ? '⚡ ' : item.is_destino ? '🎯 ' : ''}{item.job}
+      </Typography>
+      <Typography variant="caption" color="text.disabled" display="block" noWrap fontSize={10}>
+        {item.tabela}
+      </Typography>
+      <Divider sx={{ my: 0.5 }} />
+      {item.tem_dados ? (
+        <>
+          <Typography variant="caption" display="block" color="text.secondary">
+            Esp: {item.expected_start}
+          </Typography>
+          <Typography variant="caption" display="block" fontWeight={700}
+            sx={{ color: item.delay_propagado > 0 ? color : 'text.primary' }}>
+            Prev: {item.predicted_start}
+          </Typography>
+          <Typography variant="caption" display="block" color="text.disabled">
+            {item.duracao_prevista}min
+          </Typography>
+        </>
+      ) : (
+        <Typography variant="caption" color="text.disabled">sem histórico</Typography>
+      )}
+    </Paper>
+  );
+};
+
+const AnaliseDireta: React.FC = () => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [jobOrigem,    setJobOrigem]    = useState<JobBusca | null>(null);
+  const [buscaOrigem,  setBuscaOrigem]  = useState('');
+  const [jobDestino,   setJobDestino]   = useState<JobBusca | null>(null);
+  const [buscaDestino, setBuscaDestino] = useState('');
+  const [delayInput,   setDelayInput]   = useState('30');
+  const [cenario,      setCenario]      = useState('normal');
+  const [dataRef,      setDataRef]      = useState(today);
+  const [params,       setParams]       = useState<CaminhoCriticoParams | null>(null);
+
+  const { data: opOrigem,  isLoading: buscandoOrig  } = useBuscarJobs(buscaOrigem);
+  const { data: opDestino, isLoading: buscandoDest  } = useBuscarJobs(buscaDestino);
+  const { data: cenarios }                             = useCenarios();
+  const { data, isLoading, error }                     = useCaminhoCritico(params);
+
+  const handleCalcular = () => {
+    if (!jobOrigem || !jobDestino) return;
+    const d = parseFloat(delayInput);
+    if (isNaN(d) || d < 0) return;
+    setParams({
+      tab_origem:  jobOrigem.tabela,
+      job_origem:  jobOrigem.job,
+      tab_destino: jobDestino.tabela,
+      job_destino: jobDestino.job,
+      delay: d,
+      data:  dataRef,
+      cenario,
+    });
+  };
+
+  const objetivo = data?.objetivo ?? null;
+
+  // Para cadeias longas, mostrar os 3 primeiros + "..." + 3 últimos
+  const caminho = data?.caminho ?? [];
+  const MAX_VISIBLE = 8;
+  const showEllipsis = caminho.length > MAX_VISIBLE;
+  const visibleLeft  = showEllipsis ? caminho.slice(0, 3) : caminho;
+  const visibleRight = showEllipsis ? caminho.slice(-3)   : [];
+
+  return (
+    <Paper elevation={3} sx={{ p: 3, mb: 3, borderTop: '4px solid #1976d2' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <BoltIcon sx={{ color: '#1976d2' }} />
+        <Typography variant="h6" fontWeight={700} sx={{ color: '#1976d2' }}>
+          Análise Direta — Job em Processamento → Job Objetivo
+        </Typography>
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Informe o job que está atrasado, o job que você precisa monitorar e quantos
+        minutos de atraso já acumulou. O sistema calcula o caminho entre eles e estima
+        o horário previsto de execução.
+      </Typography>
+
+      {/* Formulário */}
+      <Grid container spacing={2} alignItems="flex-end">
+        <Grid item xs={12} sm={6} md={3}>
+          <Autocomplete
+            options={opOrigem?.jobs ?? []}
+            loading={buscandoOrig}
+            value={jobOrigem}
+            onChange={(_, v) => setJobOrigem(v)}
+            inputValue={buscaOrigem}
+            onInputChange={(_, v) => setBuscaOrigem(v)}
+            getOptionLabel={o => `${o.job} (${o.tabela})`}
+            isOptionEqualToValue={(a, b) => a.tabela === b.tabela && a.job === b.job}
+            noOptionsText="Digite para buscar..."
+            renderInput={p => (
+              <TextField {...p} label="⚡ Job em processamento" size="small" fullWidth
+                helperText="Job que está atrasado" />
+            )}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={2}>
+          <TextField
+            label="Atraso atual (min)"
+            size="small" fullWidth type="number"
+            value={delayInput}
+            onChange={e => setDelayInput(e.target.value)}
+            inputProps={{ min: 0, max: 1440, step: 5 }}
+            helperText="Minutos além do esperado"
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Autocomplete
+            options={opDestino?.jobs ?? []}
+            loading={buscandoDest}
+            value={jobDestino}
+            onChange={(_, v) => setJobDestino(v)}
+            inputValue={buscaDestino}
+            onInputChange={(_, v) => setBuscaDestino(v)}
+            getOptionLabel={o => `${o.job} (${o.tabela})`}
+            isOptionEqualToValue={(a, b) => a.tabela === b.tabela && a.job === b.job}
+            noOptionsText="Digite para buscar..."
+            renderInput={p => (
+              <TextField {...p} label="🎯 Job objetivo" size="small" fullWidth
+                helperText="Job que precisa monitorar" />
+            )}
+          />
+        </Grid>
+
+        <Grid item xs={6} sm={3} md={2}>
+          <FormControl size="small" fullWidth>
+            <InputLabel>Cenário</InputLabel>
+            <Select value={cenario} label="Cenário"
+              onChange={e => setCenario(e.target.value)}>
+              {cenarios?.cenarios.map(c => (
+                <MenuItem key={c.id} value={c.id}>{c.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        <Grid item xs={6} sm={3} md={1}>
+          <TextField
+            label="Data" size="small" fullWidth type="date"
+            value={dataRef} onChange={e => setDataRef(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={1}>
+          <Button
+            variant="contained" fullWidth
+            startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : <BoltIcon />}
+            onClick={handleCalcular}
+            disabled={!jobOrigem || !jobDestino || isLoading}
+            sx={{ height: 40 }}
+          >
+            Calcular
+          </Button>
+        </Grid>
+      </Grid>
+
+      {/* Erro de API */}
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {(error as Error).message || 'Erro ao calcular caminho.'}
+        </Alert>
+      )}
+
+      {/* Caminho não encontrado */}
+      {data && !data.encontrado && (
+        <Alert severity="warning" sx={{ mt: 2 }}>{data.mensagem}</Alert>
+      )}
+
+      {/* Resultado */}
+      {data && data.encontrado && (
+        <Box sx={{ mt: 3 }}>
+          {/* Cadeia visual */}
+          <Box sx={{ overflowX: 'auto', display: 'flex', alignItems: 'center',
+                     gap: 0.5, py: 1, pb: 2 }}>
+            {(showEllipsis ? visibleLeft : caminho).map((item, i) => (
+              <React.Fragment key={`L${i}`}>
+                <JobCard item={item} />
+                {(i < visibleLeft.length - 1 || showEllipsis) && (
+                  <ArrowForwardIcon sx={{ color: 'text.disabled', flexShrink: 0 }} fontSize="small" />
+                )}
+              </React.Fragment>
+            ))}
+
+            {showEllipsis && (
+              <>
+                <Tooltip title={`${caminho.length - 6} jobs intermediários omitidos`}>
+                  <Typography variant="caption" color="text.disabled"
+                    sx={{ px: 1, flexShrink: 0, cursor: 'default' }}>
+                    · · · {caminho.length - 6} jobs · · ·
+                  </Typography>
+                </Tooltip>
+                <ArrowForwardIcon sx={{ color: 'text.disabled', flexShrink: 0 }} fontSize="small" />
+                {visibleRight.map((item, i) => (
+                  <React.Fragment key={`R${i}`}>
+                    <JobCard item={item} />
+                    {i < visibleRight.length - 1 && (
+                      <ArrowForwardIcon sx={{ color: 'text.disabled', flexShrink: 0 }} fontSize="small" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+          </Box>
+
+          {/* Resultado destacado */}
+          {objetivo && (
+            <Box sx={{
+              p: 2.5,
+              bgcolor: CRIT_BG[objetivo.criticidade],
+              border: `2px solid ${CRIT_COLOR[objetivo.criticidade]}`,
+              borderRadius: 2,
+              display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center',
+            }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  JOB OBJETIVO
+                </Typography>
+                <Typography variant="h6" fontWeight={700}>
+                  {objetivo.job}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {objetivo.tabela}
+                </Typography>
+              </Box>
+
+              <Divider orientation="vertical" flexItem />
+
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">INÍCIO ESPERADO</Typography>
+                <Typography variant="h6">{objetivo.expected_start}</Typography>
+              </Box>
+
+              <ArrowForwardIcon sx={{ color: CRIT_COLOR[objetivo.criticidade] }} />
+
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">INÍCIO PREVISTO</Typography>
+                <Typography variant="h5" fontWeight={900}
+                  sx={{ color: CRIT_COLOR[objetivo.criticidade] }}>
+                  {objetivo.predicted_start}
+                </Typography>
+              </Box>
+
+              <Divider orientation="vertical" flexItem />
+
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block">TÉRMINO PREVISTO</Typography>
+                <Typography variant="h6">{objetivo.predicted_end}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  duração prevista: {objetivo.duracao_prevista}min
+                </Typography>
+              </Box>
+
+              <Divider orientation="vertical" flexItem />
+
+              <Box sx={{ textAlign: 'center' }}>
+                <Chip
+                  label={`+${objetivo.delay_propagado} min de atraso`}
+                  sx={{
+                    bgcolor: CRIT_COLOR[objetivo.criticidade],
+                    color: 'white', fontWeight: 700, fontSize: 14,
+                    height: 36, px: 1,
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                  {data.n_hops} job{data.n_hops !== 1 ? 's' : ''} no caminho
+                  · percentil {data.percentil}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
+    </Paper>
+  );
+};
+
 // ── Tela principal ────────────────────────────────────────────────────────────
 
 export const Tela4Analise: React.FC = () => {
@@ -403,15 +707,29 @@ export const Tela4Analise: React.FC = () => {
   return (
     <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>
-        🧠 Simulador de Impacto Preditivo
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Simule o impacto em cascata quando um processo atrasa, calculando dinamicamente
-        quando cada job downstream irá executar com base no histórico e no cenário financeiro.
+        🧠 Análise Preditiva
       </Typography>
 
+      {/* ── Análise direta (destaque) ── */}
+      <AnaliseDireta />
+
+      {/* ── Simulação completa (accordion) ── */}
+      <Accordion disableGutters elevation={2}
+        sx={{ mb: 3, '&:before': { display: 'none' }, borderRadius: 1 }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}
+          sx={{ bgcolor: '#f5f5f5', borderRadius: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PlayArrowIcon fontSize="small" color="primary" />
+            <Typography fontWeight={700}>Simulação Completa — todos os jobs downstream</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+              BFS a partir de um job com Gantt e tabela de impacto
+            </Typography>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 2 }}>
+
       {/* ── Painel de entrada ── */}
-      <Paper sx={{ p: 3, mb: 3 }} elevation={2}>
+      <Paper sx={{ p: 3, mb: 3 }} elevation={0} variant="outlined">
         <Typography variant="subtitle1" fontWeight={700} gutterBottom>
           Configuração da Simulação
         </Typography>
@@ -566,15 +884,14 @@ export const Tela4Analise: React.FC = () => {
 
       {/* Estado vazio */}
       {!simData && !simulando && (
-        <Box sx={{ textAlign: 'center', py: 8, color: 'text.disabled' }}>
-          <AccessTimeIcon sx={{ fontSize: 64, mb: 2 }} />
-          <Typography variant="h6">Selecione um job e clique em Simular</Typography>
-          <Typography variant="body2">
-            O sistema calculará o impacto em cascata usando histórico de {' '}
-            {cenarios?.cenarios.find(c => c.id === cenario)?.percentil ?? 50}º percentil.
-          </Typography>
+        <Box sx={{ textAlign: 'center', py: 6, color: 'text.disabled' }}>
+          <AccessTimeIcon sx={{ fontSize: 48, mb: 1 }} />
+          <Typography variant="body1">Selecione um job e clique em Simular</Typography>
         </Box>
       )}
+
+        </AccordionDetails>
+      </Accordion>
     </Box>
   );
 };

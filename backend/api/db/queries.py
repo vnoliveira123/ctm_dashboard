@@ -960,6 +960,48 @@ def get_fluxos_downstream(db: Session, tabela: str, job: str) -> tuple:
     return subgraph, visited
 
 
+def get_caminho_entre_jobs(db: Session, tab_orig: str, job_orig: str,
+                           tab_dest: str, job_dest: str) -> list | None:
+    """Encontra o caminho mais curto (BFS) entre dois jobs no grafo de fluxos.
+    Retorna lista de (tabela, job) do início ao fim, ou None se não existe caminho."""
+    from collections import deque
+
+    all_fluxos = db.query(Fluxo).all()
+    adj: dict = {}
+    for f in all_fluxos:
+        src  = (f.tabela_origem,  f.job_origem)
+        dest = (f.tabela_destino, f.job_destino)
+        adj.setdefault(src, []).append(dest)
+
+    start = (tab_orig, job_orig)
+    end   = (tab_dest, job_dest)
+
+    if start == end:
+        return [start]
+
+    # BFS com predecessor — eficiente para grafos grandes
+    pred: dict = {start: None}
+    queue = deque([start])
+
+    while queue:
+        cur = queue.popleft()
+        for neighbor in adj.get(cur, []):
+            if neighbor not in pred:
+                pred[neighbor] = cur
+                if neighbor == end:
+                    # Reconstrói o caminho
+                    path = []
+                    node = end
+                    while node is not None:
+                        path.append(node)
+                        node = pred[node]
+                    path.reverse()
+                    return path
+                queue.append(neighbor)
+
+    return None
+
+
 def buscar_jobs(db: Session, q: str, limit: int = 30) -> list:
     """Busca jobs com histórico de execução para autocomplete."""
     rows = db.execute(text("""
