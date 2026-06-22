@@ -137,7 +137,6 @@ def get_processos_graficos(db: Session, tabela=None, job=None, rotina=None, grup
         base.with_entities(Processo.tabela, func.count(Processo.id).label('total_jobs'))
         .group_by(Processo.tabela)
         .order_by(desc('total_jobs'))
-        .limit(15)
         .all()
     )
 

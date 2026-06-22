@@ -184,11 +184,6 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
         })}
         <line y1={IH} y2={IH} x1={0} x2={IW} stroke="#ccc" />
         <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Hora do dia</text>
-        <Legend items={[
-          { color: '#4caf50', label: 'OK' },
-          { color: '#f44336', label: 'NOT OK' },
-          { color: '#ff9800', label: 'Pior hora' },
-        ]} x={IW - 90} y={-8} />
       </g>
     </svg>
   );
@@ -326,9 +321,21 @@ const InsightCard: React.FC<{ icon: React.ReactNode; label: string; value: React
   </Card>
 );
 
-const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const ChartCard: React.FC<{ title: string; children: React.ReactNode; legend?: { color: string; label: string }[] }> = ({ title, children, legend }) => (
   <Paper variant="outlined" sx={{ p: 2 }}>
-    <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>{title}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+      <Typography variant="subtitle2" fontWeight={600}>{title}</Typography>
+      {legend && (
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          {legend.map(it => (
+            <Box key={it.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: it.color, flexShrink: 0 }} />
+              <Typography variant="caption" color="text.secondary">{it.label}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
     {children}
   </Paper>
 );
@@ -529,7 +536,11 @@ export const Tela2Execucoes: React.FC = () => {
           </ChartCard>
         </Grid>
         <Grid item xs={12} md={6}>
-          <ChartCard title="Execuções por Hora do Dia">
+          <ChartCard title="Execuções por Hora do Dia" legend={[
+            { color: '#4caf50', label: 'OK' },
+            { color: '#f44336', label: 'NOT OK' },
+            { color: '#ff9800', label: 'Horário de pico' },
+          ]}>
             <GraficoHorario data={graficos?.por_hora ?? []} />
           </ChartCard>
         </Grid>

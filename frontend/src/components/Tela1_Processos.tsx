@@ -4,7 +4,7 @@ import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, TextField, Button, CircularProgress, Alert, Pagination, Card,
   CardContent, Typography, Chip, FormControl, InputLabel, Select, MenuItem,
-  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid, Autocomplete,
+  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid, Autocomplete, LinearProgress,
 } from '@mui/material';
 import FilterListIcon          from '@mui/icons-material/FilterList';
 import ClearIcon               from '@mui/icons-material/Clear';
@@ -40,8 +40,6 @@ const FILTROS_VAZIOS: FiltrosProcesso = {
 };
 
 
-const trunc = (s: string, n: number) => s.length > n ? s.slice(0, n) + '…' : s;
-
 // ── Wrapper de gráfico ────────────────────────────────────────────────────────
 const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <Card variant="outlined" sx={{ height: '100%' }}>
@@ -57,8 +55,8 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 // ── 1. Pizza — Periodicidades ─────────────────────────────────────────────────
 const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const R = 100; const IR = 56; const CX = 190; const CY = 120;
-  const VW = 560; const VH = 260;
+  const R = 130; const IR = 74; const CX = 180; const CY = 150;
+  const VW = 560; const VH = 320;
   const pie   = d3.pie<{ periodicidade: string; total: number }>().value(d => d.total).sort(null);
   const arc   = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(IR).outerRadius(R);
   const arcLbl = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
@@ -100,44 +98,33 @@ const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: numbe
   );
 };
 
-// ── 2. Barras horizontais — Top tabelas por jobs (scroll) ────────────────────
+// ── 2. Ranking de tabelas por nº de jobs ─────────────────────────────────────
 const GraficoJobsPorTabela: React.FC<{ data: { tabela: string; total_jobs: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const barH = 20, VW = 520, ML = 100, MR = 32, MT = 8, MB = 8;
-  const IW_G = VW - ML - MR;
-  const IH   = data.length * (barH + 4);
-  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, IW_G]).nice();
-  const y = d3.scaleBand().domain(data.map(d => d.tabela)).range([0, IH]).padding(0.15);
-
+  const maxVal = Math.max(...data.map(d => d.total_jobs), 1);
   return (
-    <Box sx={{ aspectRatio: `${VW} / 222`, overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${VW} ${IH + MT + MB}`} width="100%"
-           style={{ minHeight: IH + MT + MB }}>
-        <g transform={`translate(${ML},${MT})`}>
-          {x.ticks(5).map(t => (
-            <g key={t}>
-              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-              <text x={x(t)} y={IH + 14} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
-            </g>
+    <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Tabela</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Nº de Jobs</TableCell>
+            <TableCell sx={{ width: 120 }} />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((d, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{d.tabela}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{d.total_jobs}</TableCell>
+              <TableCell sx={{ width: 120 }}>
+                <LinearProgress variant="determinate" value={(d.total_jobs / maxVal) * 100}
+                  color="primary" sx={{ height: 8, borderRadius: 4 }} />
+              </TableCell>
+            </TableRow>
           ))}
-          {data.map(d => (
-            <g key={d.tabela}>
-              <rect x={0} y={y(d.tabela)!} width={x(d.total_jobs)} height={y.bandwidth()}
-                    fill="#1976d2" rx={2} opacity={0.85}>
-                <title>{d.tabela}: {d.total_jobs} jobs</title>
-              </rect>
-              <text x={-4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
-                    textAnchor="end" fontSize={10} fill="#555">
-                {trunc(d.tabela, 11)}
-              </text>
-              <text x={x(d.total_jobs) + 4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
-                    fontSize={9} fill="#333" fontWeight="bold">
-                {d.total_jobs}
-              </text>
-            </g>
-          ))}
-        </g>
-      </svg>
+        </TableBody>
+      </Table>
     </Box>
   );
 };
@@ -382,22 +369,8 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
       {/* ── Gráficos ── */}
       {graficos && (
         <>
-          {/* Linha 1: Pizza + Barras */}
+          {/* Linha 1: Três comparativos */}
           <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={5}>
-              <ChartCard title="Distribuição por Periodicidade">
-                <GraficoPeriodPizza data={graficos.periodicidades} />
-              </ChartCard>
-            </Grid>
-            <Grid item xs={12} md={7}>
-              <ChartCard title="Top 15 Tabelas por Número de JOBs">
-                <GraficoJobsPorTabela data={graficos.jobs_por_tabela} />
-              </ChartCard>
-            </Grid>
-          </Grid>
-
-          {/* Linha 2: Três comparativos */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} md={4}>
               <ChartCard title="Carga Automática — Tabelas">
                 <GraficoComparativo
@@ -417,6 +390,20 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
                 <GraficoComparativo
                   sim={graficos.alertas.sim} nao={graficos.alertas.nao} total={graficos.alertas.total}
                   labelSim="Com alerta" labelNao="Sem alerta" corSim="#c62828" />
+              </ChartCard>
+            </Grid>
+          </Grid>
+
+          {/* Linha 2: Pizza + Ranking de tabelas */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={12} md={5}>
+              <ChartCard title="Distribuição por Periodicidade">
+                <GraficoPeriodPizza data={graficos.periodicidades} />
+              </ChartCard>
+            </Grid>
+            <Grid item xs={12} md={7}>
+              <ChartCard title="Tabelas por Número de JOBs">
+                <GraficoJobsPorTabela data={graficos.jobs_por_tabela} />
               </ChartCard>
             </Grid>
           </Grid>
