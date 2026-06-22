@@ -104,20 +104,20 @@ const GraficoJobsPorTabela: React.FC<{ data: { tabela: string; total_jobs: numbe
   const maxVal = Math.max(...data.map(d => d.total_jobs), 1);
   return (
     <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
-      <Table size="small">
+      <Table size="small" sx={{ width: '100%' }}>
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Tabela</TableCell>
-            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Nº de Jobs</TableCell>
-            <TableCell sx={{ width: 120 }} />
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', width: 130 }}>Tabela</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', width: 70, whiteSpace: 'nowrap' }}>Nº de Jobs</TableCell>
+            <TableCell />
           </TableRow>
         </TableHead>
         <TableBody>
           {data.map((d, i) => (
             <TableRow key={i} hover>
-              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{d.tabela}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{d.total_jobs}</TableCell>
-              <TableCell sx={{ width: 120 }}>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', width: 130, whiteSpace: 'nowrap' }}>{d.tabela}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', width: 70, whiteSpace: 'nowrap' }}>{d.total_jobs}</TableCell>
+              <TableCell>
                 <LinearProgress variant="determinate" value={(d.total_jobs / maxVal) * 100}
                   color="primary" sx={{ height: 8, borderRadius: 4 }} />
               </TableCell>
@@ -225,9 +225,6 @@ export const Tela1Processos: React.FC = () => {
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosProcesso>(FILTROS_VAZIOS);
   const [page, setPage]                   = useState(1);
   const [expandido, setExpandido]         = useState(true);
-  const [exibirSemExec, setExibirSemExec]       = useState(false);
-  const [exibirAlertasNP, setExibirAlertasNP]   = useState(false);
-  const [exibirJanela, setExibirJanela]         = useState(false);
 
 const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
@@ -396,12 +393,12 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
 
           {/* Linha 2: Pizza + Ranking de tabelas */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={5}>
+            <Grid item xs={12} md={6}>
               <ChartCard title="Distribuição por Periodicidade">
                 <GraficoPeriodPizza data={graficos.periodicidades} />
               </ChartCard>
             </Grid>
-            <Grid item xs={12} md={7}>
+            <Grid item xs={12} md={6}>
               <ChartCard title="Tabelas por Número de JOBs">
                 <GraficoJobsPorTabela data={graficos.jobs_por_tabela} />
               </ChartCard>
@@ -410,26 +407,20 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
         </>
       )}
 
-      {/* ── Análise: Jobs Sem Execução + Alertas Não Padronizados (lado a lado) ── */}
+      {/* ── Jobs Inativos + Alertas Não Padronizados (sempre expandido, lado a lado) ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {/* Jobs Inativos (CTM × LOG) */}
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ height: '100%' }}>
-            <Box
-              sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-              onClick={() => setExibirSemExec(v => !v)}
-            >
-              <PowerOffIcon fontSize="small" color="action" />
-              <Typography variant="subtitle2" fontWeight={600}>Jobs Inativos (CTM × LOG)</Typography>
-              <Chip label={semExec?.total ?? 0} size="small" sx={{ ml: 0.5 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                {exibirSemExec ? 'Recolher ▲' : 'Expandir ▼'}
-              </Typography>
-            </Box>
-            <Collapse in={exibirSemExec}>
-              <Divider />
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: '16px !important' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <PowerOffIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+                  Jobs Inativos (CTM × LOG)
+                </Typography>
+                <Chip label={semExec?.total ?? 0} size="small" sx={{ ml: 0.5 }} />
+              </Box>
               {semExec && semExec.jobs.length > 0 ? (
-                <TableContainer>
+                <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'grey.100' }}>
@@ -456,36 +447,28 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
-              ) : (
-                <Box sx={{ px: 2, py: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Nenhum job inativo — todos os processos cadastrados possuem execuções no período.
-                  </Typography>
                 </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Nenhum job inativo — todos os processos cadastrados possuem execuções no período.
+                </Typography>
               )}
-            </Collapse>
-          </Paper>
+            </CardContent>
+          </Card>
         </Grid>
 
-        {/* Alertas Não Padronizados (≠ U-ECS) */}
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ height: '100%' }}>
-            <Box
-              sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-              onClick={() => setExibirAlertasNP(v => !v)}
-            >
-              <NotificationsActiveIcon fontSize="small" color="error" />
-              <Typography variant="subtitle2" fontWeight={600}>Alertas Não Padronizados (≠ U-ECS)</Typography>
-              <Chip label={alertasNP?.alertas.length ?? 0} size="small" color="error" sx={{ ml: 0.5 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                {exibirAlertasNP ? 'Recolher ▲' : 'Expandir ▼'}
-              </Typography>
-            </Box>
-            <Collapse in={exibirAlertasNP}>
-              <Divider />
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: '16px !important' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <NotificationsActiveIcon fontSize="small" color="error" />
+                <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+                  Alertas Não Padronizados (≠ U-ECS)
+                </Typography>
+                <Chip label={alertasNP?.alertas.length ?? 0} size="small" color="error" sx={{ ml: 0.5 }} />
+              </Box>
               {alertasNP && alertasNP.alertas.length > 0 ? (
-                <TableContainer>
+                <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'error.light' }}>
@@ -510,54 +493,43 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
-              ) : (
-                <Box sx={{ px: 2, py: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Nenhum alerta fora do padrão U-ECS encontrado.
-                  </Typography>
                 </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Nenhum alerta fora do padrão U-ECS encontrado.
+                </Typography>
               )}
-            </Collapse>
-          </Paper>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
 
       {/* ── Janela de Carga ── */}
-      <Paper variant="outlined" sx={{ mb: 3 }}>
-        <Box
-          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
-          onClick={() => setExibirJanela(v => !v)}
-        >
-          <AccessTimeIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle2" fontWeight={600}>Janela de Carga — Análise de Pontualidade</Typography>
-          {janelaData?.janela && (
-            <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
-              {(() => {
-                const atrasadas = janelaData.janela.filter(j => j.status === 'atrasada').length;
-                const noPrazo   = janelaData.janela.filter(j => j.status === 'no_prazo').length;
-                return (
-                  <>
-                    {atrasadas > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`} size="small" color="error" />}
-                    {noPrazo   > 0 && <Chip label={`${noPrazo} no prazo`}                               size="small" color="success" variant="outlined" />}
-                  </>
-                );
-              })()}
-            </Box>
-          )}
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-            {exibirJanela ? 'Recolher ▲' : 'Expandir ▼'}
-          </Typography>
-        </Box>
-        <Collapse in={exibirJanela}>
-          <Divider />
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        <CardContent sx={{ pb: '16px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <AccessTimeIcon fontSize="small" color="primary" />
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+              Janela de Carga — Análise de Pontualidade
+            </Typography>
+            {janelaData?.janela && (() => {
+              const atrasadas = janelaData.janela.filter(j => j.status === 'atrasada').length;
+              const noPrazo   = janelaData.janela.filter(j => j.status === 'no_prazo').length;
+              return (
+                <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
+                  {atrasadas > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`} size="small" color="error" />}
+                  {noPrazo   > 0 && <Chip label={`${noPrazo} no prazo`} size="small" color="success" variant="outlined" />}
+                </Box>
+              );
+            })()}
+          </Box>
           {!janelaData?.janela.length ? (
-            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
               Nenhuma tabela com carga programada encontrada nos últimos 7 dias.
             </Typography>
           ) : (
-            <TableContainer>
-              <Table size="small">
+            <Box sx={{ maxHeight: 320, overflowY: 'auto' }}>
+              <Table size="small" sx={{ width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'primary.main' }}>
                     {['Tabela', 'Grupo', 'Horário CTM', 'Última Execução', 'Primeiro Início', 'Atraso', 'Situação'].map(c => (
@@ -591,10 +563,10 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
                   ))}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </Box>
           )}
-        </Collapse>
-      </Paper>
+        </CardContent>
+      </Card>
 
       {/* ── Tabela ── */}
       {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>}
