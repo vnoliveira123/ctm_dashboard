@@ -886,6 +886,92 @@ def get_janela_carga(db: Session, dias: int = 7) -> list:
     return resultado
 
 
+# ══════════════════════════════════════════════════════════════════
+# ANÁLISE PREDITIVA
+# ══════════════════════════════════════════════════════════════════
+
+def get_historico_job_duracao(db: Session, tabela: str, job: str) -> list:
+    """Retorna histórico diário de duração de um job para treinar o preditor."""
+    rows = db.execute(text("""
+        SELECT dia::date AS data,
+               ROUND(avg_dur::numeric, 2) AS duracao,
+               total, ok, nok
+        FROM cagg_execucoes_dia
+        WHERE tabela = :tabela AND job = :job
+          AND avg_dur IS NOT NULL AND total > 0
+        ORDER BY dia
+    """), {'tabela': tabela, 'job': job}).fetchall()
+    return [
+        {
+            'data':    str(r.data),
+            'duracao': float(r.duracao or 0),
+            'total':   int(r.total),
+            'ok':      int(r.ok),
+            'nok':     int(r.nok),
+        }
+        for r in rows
+    ]
+
+
+def get_inicio_medio_jobs_batch(db: Session, job_keys: list) -> dict:
+    """Retorna horário médio de início (min desde meia-noite) para lista de (tabela, job)."""
+    if not job_keys:
+        return {}
+    tabelas = list({t for t, _ in job_keys})
+    jobs_   = list({j for _, j in job_keys})
+    rows = db.execute(text("""
+        SELECT tabela, job,
+               AVG(EXTRACT(HOUR   FROM data_execucao) * 60
+                 + EXTRACT(MINUTE FROM data_execucao)) AS inicio_medio
+        FROM mat_execucoes_timeline
+        WHERE tabela = ANY(:tabs) AND job = ANY(:jobs)
+        GROUP BY tabela, job
+    """), {'tabs': tabelas, 'jobs': jobs_}).fetchall()
+    return {
+        (r.tabela, r.job): float(r.inicio_medio)
+        for r in rows if r.inicio_medio is not None
+    }
+
+
+def get_fluxos_downstream(db: Session, tabela: str, job: str) -> tuple:
+    """BFS a partir de (tabela, job) para encontrar todos os jobs downstream.
+    Retorna (subgraph_adj, all_jobs_set)."""
+    all_fluxos = db.query(Fluxo).all()
+    adj: dict = {}
+    for f in all_fluxos:
+        src  = (f.tabela_origem, f.job_origem)
+        dest = (f.tabela_destino, f.job_destino)
+        adj.setdefault(src, []).append(dest)
+
+    start   = (tabela, job)
+    visited = {start}
+    queue   = [start]
+    subgraph: dict = {}
+
+    while queue:
+        cur       = queue.pop(0)
+        neighbors = adj.get(cur, [])
+        subgraph[cur] = neighbors
+        for dest in neighbors:
+            if dest not in visited:
+                visited.add(dest)
+                queue.append(dest)
+
+    return subgraph, visited
+
+
+def buscar_jobs(db: Session, q: str, limit: int = 30) -> list:
+    """Busca jobs com histórico de execução para autocomplete."""
+    rows = db.execute(text("""
+        SELECT DISTINCT tabela, job
+        FROM mat_execucoes_timeline
+        WHERE tabela ILIKE :q OR job ILIKE :q
+        ORDER BY tabela, job
+        LIMIT :lim
+    """), {'q': f'%{q}%', 'lim': limit}).fetchall()
+    return [{'tabela': r.tabela, 'job': r.job} for r in rows]
+
+
 def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
                      rotinas=None, posicao=None, carga=None, horario_carga=None,
                      controle=None):

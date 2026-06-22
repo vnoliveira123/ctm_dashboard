@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routers import processos, execucoes, fluxos
+from api.routers import processos, execucoes, fluxos, analise
 from api.db.database import init_db
 import logging
 
@@ -29,7 +29,8 @@ app.add_middleware(
 # Incluir routers
 app.include_router(processos.router, prefix="/api/processos", tags=["Processos"])
 app.include_router(execucoes.router, prefix="/api/execucoes", tags=["Execucoes"])
-app.include_router(fluxos.router, prefix="/api/fluxos", tags=["Fluxos"])
+app.include_router(fluxos.router,  prefix="/api/fluxos",  tags=["Fluxos"])
+app.include_router(analise.router, prefix="/api/analise", tags=["Analise"])
 
 # ===== Startup Events =====
 @app.on_event("startup")

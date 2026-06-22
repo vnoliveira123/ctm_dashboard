@@ -8,7 +8,8 @@ export const Sidebar: React.FC = () => {
   const menuItems = [
     { label: '📋 Processos', path: '/processos' },
     { label: '📈 Execuções', path: '/execucoes' },
-    { label: '🔗 Fluxos', path: '/fluxos' },
+    { label: '🔗 Fluxos',             path: '/fluxos' },
+    { label: '🧠 Análise Preditiva', path: '/analise' },
   ];
 
   return (

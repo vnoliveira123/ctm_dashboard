@@ -6,6 +6,7 @@ import { Sidebar } from './components/Shared/Sidebar';
 import { Tela1Processos } from './components/Tela1_Processos';
 import { Tela2Execucoes } from './components/Tela2_Execucoes';
 import { Tela3Fluxos } from './components/Tela3_Fluxos';
+import { Tela4Analise } from './components/Tela4_Analise';
 
 function App() {
   return (
@@ -19,7 +20,8 @@ function App() {
               <Route path="/" element={<Tela1Processos />} />
               <Route path="/processos" element={<Tela1Processos />} />
               <Route path="/execucoes" element={<Tela2Execucoes />} />
-              <Route path="/fluxos" element={<Tela3Fluxos />} />
+              <Route path="/fluxos"  element={<Tela3Fluxos />} />
+              <Route path="/analise" element={<Tela4Analise />} />
             </Routes>
           </Box>
         </Box>
