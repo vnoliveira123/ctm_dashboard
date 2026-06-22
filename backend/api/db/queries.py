@@ -579,7 +579,14 @@ def get_jobs_sem_execucao(db: Session, limit: int = 50):
     ]
 
 
-def get_alertas_nao_padrao(db: Session):
+def get_alertas_nao_padrao(
+    db: Session,
+    tabela: str | None = None,
+    job: str | None = None,
+    rotina: str | None = None,
+    grupo: str | None = None,
+    tipo_alerta: str | None = None,
+):
     """Jobs com alerta cujo tipo_alerta é diferente de 'U-ECS', com volume de execuções."""
     exec_sub = (
         db.query(
@@ -590,7 +597,7 @@ def get_alertas_nao_padrao(db: Session):
         .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
         .subquery()
     )
-    rows = (
+    q = (
         db.query(
             Processo.tabela,
             Processo.job,
@@ -604,9 +611,18 @@ def get_alertas_nao_padrao(db: Session):
         ))
         .filter(Processo.tem_alerta == True)
         .filter(or_(Processo.tipo_alerta == None, Processo.tipo_alerta != 'U-ECS'))
-        .order_by(desc('total_exec'))
-        .all()
     )
+    if tabela:
+        q = q.filter(Processo.tabela.ilike(f'%{tabela}%'))
+    if job:
+        q = q.filter(Processo.job.ilike(f'%{job}%'))
+    if rotina:
+        q = q.filter(func.left(Processo.tabela, 4) == rotina)
+    if grupo:
+        q = q.filter(Processo.grupo.like(f'{grupo}-%'))
+    if tipo_alerta:
+        q = q.filter(Processo.tipo_alerta == tipo_alerta)
+    rows = q.order_by(desc('total_exec')).all()
     return [
         {
             'tabela':      r.tabela,
@@ -823,7 +839,7 @@ _CTM_CUTOVER_H = 7   # virada de data CTM às 07h00
 
 
 def get_janela_carga(db: Session, dias: int = 7,
-                     tabelas=None, rotinas=None) -> list:
+                     tabelas=None, rotinas=None, horarios=None, grupos=None) -> list:
     """Compara horario_carga (CTM) com o primeiro início real da tabela (LOG).
 
     Regras de negócio:
@@ -845,23 +861,28 @@ def get_janela_carga(db: Session, dias: int = 7,
     if rotinas:
         where_parts.append("SUBSTRING(tabela, 1, 4) = ANY(:rot_filtros)")
         params['rot_filtros'] = rotinas
+    if horarios:
+        where_parts.append("horario_carga::int = ANY(:horarios_int)")
+        params['horarios_int'] = [int(h) for h in horarios]
+    if grupos:
+        where_parts.append("SUBSTRING(grupo, 1, 4) = ANY(:grup_filtros)")
+        params['grup_filtros'] = grupos
 
     where_carga = ' AND '.join(where_parts)
 
     rows = db.execute(text(f"""
         WITH carga AS (
             -- Tabelas com horário de carga programado
-            SELECT tabela, MIN(horario_carga::int) AS hora_programada
+            SELECT tabela, MIN(horario_carga::int) AS hora_programada, MIN(grupo) AS grupo
             FROM raw_processos
             WHERE {where_carga}
             GROUP BY tabela
         ),
         ultimo_dia AS (
-            -- Último dia de execução de cada tabela dentro da janela
+            -- Último dia de execução de cada tabela (sem filtro de data — sempre pega o mais recente)
             SELECT e.tabela, MAX(DATE(e.data_execucao)) AS dia
             FROM mat_execucoes_timeline e
             JOIN carga c ON e.tabela = c.tabela
-            WHERE DATE(e.data_execucao) >= CURRENT_DATE - :dias
             GROUP BY e.tabela
         ),
         primeiros AS (
@@ -875,6 +896,7 @@ def get_janela_carga(db: Session, dias: int = 7,
         SELECT
             c.tabela,
             c.hora_programada,
+            c.grupo,
             DATE(p.primeiro_inicio)::text             AS dia,
             p.primeiro_inicio,
             EXTRACT(HOUR   FROM p.primeiro_inicio)::int AS hora_real,
@@ -900,6 +922,7 @@ def get_janela_carga(db: Session, dias: int = 7,
         resultado.append({
             'tabela':          r.tabela,
             'hora_programada': int(r.hora_programada),
+            'grupo':           r.grupo or '',
             'dia':             r.dia,
             'primeiro_inicio': r.primeiro_inicio.isoformat() if r.primeiro_inicio else None,
             'hora_real':       int(r.hora_real),

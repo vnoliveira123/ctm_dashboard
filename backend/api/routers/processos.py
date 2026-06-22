@@ -64,23 +64,40 @@ async def listar_jobs_sem_execucao(
 
 @router.get("/janela-carga")
 async def obter_janela_carga(
-    dias:   int           = Query(7,    ge=1, le=90),
-    tabela: Optional[str] = Query(None),
-    rotina: Optional[str] = Query(None),
+    dias:           int           = Query(7,    ge=1, le=90),
+    tabela:         Optional[str] = Query(None),
+    rotina:         Optional[str] = Query(None),
+    grupo:          Optional[str] = Query(None),
+    horarios_carga: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Compara horário de carga programado (CTM) com o primeiro início real de cada tabela."""
-    tabelas = [tabela] if tabela else None
-    rotinas = [rotina] if rotina else None
-    rows = get_janela_carga(db, dias=dias, tabelas=tabelas, rotinas=rotinas)
+    tabelas  = [tabela] if tabela else None
+    rotinas  = [rotina] if rotina else None
+    grupos   = [grupo]  if grupo  else None
+    horarios = [h.strip() for h in horarios_carga.split(',') if h.strip()] if horarios_carga else None
+    rows = get_janela_carga(db, dias=dias, tabelas=tabelas, rotinas=rotinas, horarios=horarios, grupos=grupos)
     return {"janela": rows}
 
 
 @router.get("/alertas-nao-padrao")
-async def listar_alertas_nao_padrao(db: Session = Depends(get_db)):
+async def listar_alertas_nao_padrao(
+    tabela:      Optional[str] = Query(None),
+    job:         Optional[str] = Query(None),
+    rotina:      Optional[str] = Query(None),
+    grupo:       Optional[str] = Query(None),
+    tipo_alerta: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    cache_key = (
+        f"cache:processos:alertas-nao-padrao"
+        f":{tabela or ''}:{job or ''}:{rotina or ''}:{grupo or ''}:{tipo_alerta or ''}"
+    )
     return get_or_cache(
-        "cache:processos:alertas-nao-padrao", 600,
-        lambda: {"alertas": get_alertas_nao_padrao(db)},
+        cache_key, 600,
+        lambda: {"alertas": get_alertas_nao_padrao(
+            db, tabela=tabela, job=job, rotina=rotina, grupo=grupo, tipo_alerta=tipo_alerta,
+        )},
     )
 
 

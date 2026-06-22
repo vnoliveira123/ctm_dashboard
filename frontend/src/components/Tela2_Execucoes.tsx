@@ -24,14 +24,11 @@ import BarChartIcon   from '@mui/icons-material/BarChart';
 
 const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
 
-function getFiltrosIniciais(): FiltrosExecucao {
-  const hoje = new Date();
-  const fim = hoje.toISOString().split('T')[0];
-  const d = new Date(hoje);
-  d.setDate(d.getDate() - 30);
-  return { tabela: [], job: [], grupo: [], rotina: [], data_inicio: d.toISOString().split('T')[0], data_fim: fim, status: '' };
-}
 const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], data_inicio: '', data_fim: '', status: '' };
+
+function getFiltrosIniciais(): FiltrosExecucao {
+  return { ...FILTROS_VAZIOS };
+}
 
 // ── Helpers D3 ───────────────────────────────────────────────────────────────
 

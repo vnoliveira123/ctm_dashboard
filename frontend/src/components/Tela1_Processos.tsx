@@ -39,6 +39,7 @@ const FILTROS_VAZIOS: FiltrosProcesso = {
   tem_alerta: '', padrao: '', tipo_alerta: '',
 };
 
+
 const trunc = (s: string, n: number) => s.length > n ? s.slice(0, n) + '…' : s;
 
 // ── Wrapper de gráfico ────────────────────────────────────────────────────────
@@ -241,15 +242,23 @@ export const Tela1Processos: React.FC = () => {
   const [exibirAlertasNP, setExibirAlertasNP]   = useState(false);
   const [exibirJanela, setExibirJanela]         = useState(false);
 
-  const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
+const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
   const { data: graficos }         = useGraficosProcessos(filtrosAtivos);
   const { data: semExec }          = useJobsSemExecucao(50);
-  const { data: alertasNP }        = useAlertasNaoPadrao();
+  const { data: alertasNP }        = useAlertasNaoPadrao({
+    tabela:      filtrosAtivos.tabela      || undefined,
+    job:         filtrosAtivos.job         || undefined,
+    rotina:      filtrosAtivos.rotina      || undefined,
+    grupo:       filtrosAtivos.grupo       || undefined,
+    tipo_alerta: filtrosAtivos.tipo_alerta || undefined,
+  });
   const { data: janelaData }       = useJanelaCarga({
-    dias:   7,
-    tabela: filtrosAtivos.tabela || undefined,
-    rotina: filtrosAtivos.rotina || undefined,
+    dias:           7,
+    tabela:         filtrosAtivos.tabela         || undefined,
+    rotina:         filtrosAtivos.rotina         || undefined,
+    grupo:          filtrosAtivos.grupo          || undefined,
+    horarios_carga: filtrosAtivos.horarios_carga?.length ? filtrosAtivos.horarios_carga : undefined,
   });
 
   const set = (campo: keyof FiltrosProcesso) => (valor: any) => {
@@ -285,8 +294,7 @@ export const Tela1Processos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Linha única com scroll horizontal — todos os filtros lado a lado */}
-            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', overflowX: 'auto', pb: 0.5 }}>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <TextField label="Tabela" value={filtros.tabela} size="small"
                          sx={{ minWidth: 140, flexShrink: 0 }}
                          onChange={e => set('tabela')(e.target.value)} />
@@ -565,7 +573,7 @@ export const Tela1Processos: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    {['Tabela', 'Horário CTM', 'Última Execução', 'Primeiro Início', 'Atraso', 'Situação'].map(c => (
+                    {['Tabela', 'Grupo', 'Horário CTM', 'Última Execução', 'Primeiro Início', 'Atraso', 'Situação'].map(c => (
                       <TableCell key={c} sx={{ color: 'white', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -574,6 +582,9 @@ export const Tela1Processos: React.FC = () => {
                   {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => (
                     <TableRow key={i} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                      <TableCell>
+                        <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>

@@ -156,12 +156,26 @@ export const useJobsSemExecucao = (limit = 50) =>
     staleTime: 5 * 60 * 1000,
   });
 
-export const useAlertasNaoPadrao = () =>
+export interface AlertasFiltros {
+  tabela?:      string;
+  job?:         string;
+  rotina?:      string;
+  grupo?:       string;
+  tipo_alerta?: string;
+}
+
+export const useAlertasNaoPadrao = (filtros: AlertasFiltros = {}) =>
   useQuery<{ alertas: AlertaNaoPadrao[] }>({
-    queryKey: ['processos-alertas-nao-padrao'],
+    queryKey: ['processos-alertas-nao-padrao', filtros],
     queryFn: async () => {
+      const p = new URLSearchParams();
+      if (filtros.tabela)      p.append('tabela',      filtros.tabela);
+      if (filtros.job)         p.append('job',         filtros.job);
+      if (filtros.rotina)      p.append('rotina',      filtros.rotina);
+      if (filtros.grupo)       p.append('grupo',       filtros.grupo);
+      if (filtros.tipo_alerta) p.append('tipo_alerta', filtros.tipo_alerta);
       const { data } = await axios.get(
-        `${API_URL}/api/processos/alertas-nao-padrao`,
+        `${API_URL}/api/processos/alertas-nao-padrao?${p}`,
       );
       return data;
     },
@@ -171,6 +185,7 @@ export const useAlertasNaoPadrao = () =>
 export interface JanelaCargaItem {
   tabela:          string;
   hora_programada: number;
+  grupo:           string;
   dia:             string;
   primeiro_inicio: string;
   hora_real:       number;
@@ -180,9 +195,11 @@ export interface JanelaCargaItem {
 }
 
 export interface JanelaCargaFiltros {
-  dias?:   number;
-  tabela?: string;
-  rotina?: string;
+  dias?:           number;
+  tabela?:         string;
+  rotina?:         string;
+  grupo?:          string;
+  horarios_carga?: string[];
 }
 
 export const useJanelaCarga = (filtros: JanelaCargaFiltros = {}) =>
@@ -190,9 +207,11 @@ export const useJanelaCarga = (filtros: JanelaCargaFiltros = {}) =>
     queryKey: ['processos-janela-carga', filtros],
     queryFn: async () => {
       const p = new URLSearchParams();
-      if (filtros.dias)   p.append('dias',   String(filtros.dias ?? 7));
-      if (filtros.tabela) p.append('tabela', filtros.tabela);
-      if (filtros.rotina) p.append('rotina', filtros.rotina);
+      if (filtros.dias)                      p.append('dias',           String(filtros.dias ?? 7));
+      if (filtros.tabela)                    p.append('tabela',         filtros.tabela);
+      if (filtros.rotina)                    p.append('rotina',         filtros.rotina);
+      if (filtros.grupo)                     p.append('grupo',          filtros.grupo);
+      if (filtros.horarios_carga?.length)    p.append('horarios_carga', filtros.horarios_carga.join(','));
       const { data } = await axios.get(
         `${API_URL}/api/processos/janela-carga?${p}`,
       );

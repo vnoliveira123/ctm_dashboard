@@ -7,7 +7,6 @@ from api.db.queries import (
 )
 from api.middleware.cache import get_or_cache
 from typing import Optional, List
-from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -49,13 +48,6 @@ async def obter_sla_jobs(
     return get_or_cache(f"cache:execucoes:sla:{sla_minutos}", 300, _fetch)
 
 
-def _default_date_range(data_inicio: Optional[str], data_fim: Optional[str]):
-    if not data_inicio and not data_fim:
-        today = datetime.utcnow().date()
-        return (today - timedelta(days=30)).isoformat(), today.isoformat()
-    return data_inicio, data_fim
-
-
 @router.get("/graficos")
 async def obter_graficos(
     tabela: List[str] = Query(default=[]),
@@ -67,7 +59,6 @@ async def obter_graficos(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    data_inicio, data_fim = _default_date_range(data_inicio, data_fim)
     return get_execucoes_graficos(
         db,
         tabelas=tabela, jobs=job, grupos=grupo,
@@ -89,7 +80,6 @@ async def listar_execucoes(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    data_inicio, data_fim = _default_date_range(data_inicio, data_fim)
     skip = (page - 1) * limit
     resultado = get_execucoes(
         db, skip=skip, limit=limit,
