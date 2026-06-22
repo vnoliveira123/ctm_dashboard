@@ -246,7 +246,11 @@ export const Tela1Processos: React.FC = () => {
   const { data: graficos }         = useGraficosProcessos(filtrosAtivos);
   const { data: semExec }          = useJobsSemExecucao(50);
   const { data: alertasNP }        = useAlertasNaoPadrao();
-  const { data: janelaData }       = useJanelaCarga(7);
+  const { data: janelaData }       = useJanelaCarga({
+    dias:   7,
+    tabela: filtrosAtivos.tabela || undefined,
+    rotina: filtrosAtivos.rotina || undefined,
+  });
 
   const set = (campo: keyof FiltrosProcesso) => (valor: any) => {
     setFiltros(prev => {
@@ -535,12 +539,12 @@ export const Tela1Processos: React.FC = () => {
           {janelaData?.janela && (
             <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
               {(() => {
-                const atrasadas  = janelaData.janela.filter(j => j.status === 'atrasada').length;
-                const adiantadas = janelaData.janela.filter(j => j.status === 'adiantada').length;
+                const atrasadas = janelaData.janela.filter(j => j.status === 'atrasada').length;
+                const noPrazo   = janelaData.janela.filter(j => j.status === 'no_prazo').length;
                 return (
                   <>
-                    {atrasadas  > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`}  size="small" color="error" />}
-                    {adiantadas > 0 && <Chip label={`${adiantadas} adiantada${adiantadas !== 1 ? 's' : ''}`} size="small" color="info" />}
+                    {atrasadas > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`} size="small" color="error" />}
+                    {noPrazo   > 0 && <Chip label={`${noPrazo} no prazo`}                               size="small" color="success" variant="outlined" />}
                   </>
                 );
               })()}
@@ -561,35 +565,32 @@ export const Tela1Processos: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    {['Tabela', 'Horário CTM', 'Dia', 'Primeiro Início Real', 'Atraso / Adiantamento', 'Situação'].map(c => (
+                    {['Tabela', 'Horário CTM', 'Última Execução', 'Primeiro Início', 'Atraso', 'Situação'].map(c => (
                       <TableCell key={c} sx={{ color: 'white', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => {
-                    const sinal = j.delta_minutos >= 0 ? '+' : '';
-                    return (
-                      <TableRow key={i} hover>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>
-                          {String(j.hora_real).padStart(2, '0')}:{String(j.min_real).padStart(2, '0')}
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>
-                          {sinal}{j.delta_minutos} min
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={j.status === 'no_prazo' ? 'No Prazo' : j.status === 'atrasada' ? 'Atrasada' : 'Adiantada'}
-                            size="small"
-                            color={j.status === 'no_prazo' ? 'success' : j.status === 'atrasada' ? 'error' : 'info'}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>
+                        {String(j.hora_real).padStart(2, '0')}:{String(j.min_real).padStart(2, '0')}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', color: j.delta_minutos > 30 ? 'error.main' : 'text.primary', fontWeight: j.delta_minutos > 30 ? 600 : 400 }}>
+                        {j.delta_minutos > 0 ? `+${j.delta_minutos} min` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={j.status === 'no_prazo' ? 'No Prazo' : 'Atrasada'}
+                          size="small"
+                          color={j.status === 'no_prazo' ? 'success' : 'error'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>

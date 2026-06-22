@@ -176,15 +176,25 @@ export interface JanelaCargaItem {
   hora_real:       number;
   min_real:        number;
   delta_minutos:   number;
-  status:          'no_prazo' | 'atrasada' | 'adiantada';
+  status:          'no_prazo' | 'atrasada';
 }
 
-export const useJanelaCarga = (dias = 7) =>
+export interface JanelaCargaFiltros {
+  dias?:   number;
+  tabela?: string;
+  rotina?: string;
+}
+
+export const useJanelaCarga = (filtros: JanelaCargaFiltros = {}) =>
   useQuery<{ janela: JanelaCargaItem[] }>({
-    queryKey: ['processos-janela-carga', dias],
+    queryKey: ['processos-janela-carga', filtros],
     queryFn: async () => {
+      const p = new URLSearchParams();
+      if (filtros.dias)   p.append('dias',   String(filtros.dias ?? 7));
+      if (filtros.tabela) p.append('tabela', filtros.tabela);
+      if (filtros.rotina) p.append('rotina', filtros.rotina);
       const { data } = await axios.get(
-        `${API_URL}/api/processos/janela-carga?dias=${dias}`,
+        `${API_URL}/api/processos/janela-carga?${p}`,
       );
       return data;
     },

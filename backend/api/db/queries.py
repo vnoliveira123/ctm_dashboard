@@ -819,70 +819,96 @@ def get_tendencia_duracao(db: Session) -> list:
 # JANELA DE CARGA
 # ══════════════════════════════════════════════════════════════════
 
-def get_janela_carga(db: Session, dias: int = 7) -> list:
+_CTM_CUTOVER_H = 7   # virada de data CTM às 07h00
+
+
+def get_janela_carga(db: Session, dias: int = 7,
+                     tabelas=None, rotinas=None) -> list:
     """Compara horario_carga (CTM) com o primeiro início real da tabela (LOG).
-    Retorna apenas tabelas com carga=SIM e horario_carga numérico definido."""
-    rows = db.execute(text("""
-        WITH max_dia AS (
-            SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
-        ),
-        carga AS (
+
+    Regras de negócio:
+    - Uma tabela só pode estar no prazo ou atrasada — nunca adiantada.
+    - Exibe apenas a ÚLTIMA data de execução de cada tabela (sem repetição).
+    - Delta sempre ≥ 0; considera a virada CTM às 07h00 para cruzamentos de meia-noite.
+    """
+    # Filtros dinâmicos para raw_processos
+    where_parts = [
+        "carga = 'SIM'",
+        "horario_carga IS NOT NULL",
+        "horario_carga ~ '^[0-9]+$'",
+    ]
+    params: dict = {'dias': dias}
+
+    if tabelas:
+        where_parts.append("tabela ILIKE ANY(:tab_filtros)")
+        params['tab_filtros'] = [f'%{t}%' for t in tabelas]
+    if rotinas:
+        where_parts.append("SUBSTRING(tabela, 1, 4) = ANY(:rot_filtros)")
+        params['rot_filtros'] = rotinas
+
+    where_carga = ' AND '.join(where_parts)
+
+    rows = db.execute(text(f"""
+        WITH carga AS (
+            -- Tabelas com horário de carga programado
             SELECT tabela, MIN(horario_carga::int) AS hora_programada
             FROM raw_processos
-            WHERE carga = 'SIM'
-              AND horario_carga IS NOT NULL
-              AND horario_carga ~ '^[0-9]+$'
+            WHERE {where_carga}
             GROUP BY tabela
         ),
+        ultimo_dia AS (
+            -- Último dia de execução de cada tabela dentro da janela
+            SELECT e.tabela, MAX(DATE(e.data_execucao)) AS dia
+            FROM mat_execucoes_timeline e
+            JOIN carga c ON e.tabela = c.tabela
+            WHERE DATE(e.data_execucao) >= CURRENT_DATE - :dias
+            GROUP BY e.tabela
+        ),
         primeiros AS (
-            SELECT
-                e.tabela,
-                DATE(e.data_execucao) AS dia,
-                MIN(e.data_execucao)  AS primeiro_inicio
-            FROM mat_execucoes_timeline e, max_dia m
-            WHERE DATE(e.data_execucao) > m.ultimo - :dias
-            GROUP BY e.tabela, DATE(e.data_execucao)
+            -- Primeiro início nesse último dia
+            SELECT e.tabela, MIN(e.data_execucao) AS primeiro_inicio
+            FROM mat_execucoes_timeline e
+            JOIN ultimo_dia u ON e.tabela = u.tabela
+                              AND DATE(e.data_execucao) = u.dia
+            GROUP BY e.tabela
         )
         SELECT
             c.tabela,
             c.hora_programada,
-            p.dia::text AS dia,
+            DATE(p.primeiro_inicio)::text             AS dia,
             p.primeiro_inicio,
             EXTRACT(HOUR   FROM p.primeiro_inicio)::int AS hora_real,
-            EXTRACT(MINUTE FROM p.primeiro_inicio)::int AS min_real,
-            (EXTRACT(HOUR   FROM p.primeiro_inicio) * 60
-             + EXTRACT(MINUTE FROM p.primeiro_inicio)
-             - c.hora_programada * 60)::int AS delta_minutos
+            EXTRACT(MINUTE FROM p.primeiro_inicio)::int AS min_real
         FROM primeiros p
         JOIN carga c USING (tabela)
-        ORDER BY tabela, dia
-    """), {'dias': dias}).fetchall()
+    """), params).fetchall()
 
-    def _normalize(delta: int) -> int:
-        """Ajusta delta para cruzamentos de meia-noite: assume que delta > 12h é adiantamento do dia seguinte."""
-        if delta > 720:   return delta - 1440
-        if delta < -720:  return delta + 1440
-        return delta
+    resultado = []
+    for r in rows:
+        scheduled_min = int(r.hora_programada) * 60
+        actual_min    = int(r.hora_real) * 60 + int(r.min_real)
+        delta         = actual_min - scheduled_min
 
-    def _status(delta: int) -> str:
-        if delta > 30:  return 'atrasada'
-        if delta < -30: return 'adiantada'
-        return 'no_prazo'
+        # Cruzamento de meia-noite: job noturno (ex: prev 23h00, exec 00h10)
+        # Threshold = virada CTM × 60; se delta ficar abaixo disso, somamos 1440
+        if delta < -(_CTM_CUTOVER_H * 60):
+            delta += 1440
 
-    resultado = [
-        {
+        # Tabela nunca pode adiantar — delta mínimo é 0
+        delta = max(0, delta)
+
+        resultado.append({
             'tabela':          r.tabela,
             'hora_programada': int(r.hora_programada),
             'dia':             r.dia,
             'primeiro_inicio': r.primeiro_inicio.isoformat() if r.primeiro_inicio else None,
             'hora_real':       int(r.hora_real),
             'min_real':        int(r.min_real),
-            'delta_minutos':   _normalize(int(r.delta_minutos)),
-            'status':          _status(_normalize(int(r.delta_minutos))),
-        }
-        for r in rows
-    ]
-    resultado.sort(key=lambda x: abs(x['delta_minutos']), reverse=True)
+            'delta_minutos':   delta,
+            'status':          'atrasada' if delta > 30 else 'no_prazo',
+        })
+
+    resultado.sort(key=lambda x: x['delta_minutos'], reverse=True)
     return resultado
 
 

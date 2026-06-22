@@ -64,11 +64,15 @@ async def listar_jobs_sem_execucao(
 
 @router.get("/janela-carga")
 async def obter_janela_carga(
-    dias: int = Query(7, ge=1, le=30),
+    dias:   int           = Query(7,    ge=1, le=90),
+    tabela: Optional[str] = Query(None),
+    rotina: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Compara horário de carga programado (CTM) com o primeiro início real de cada tabela."""
-    rows = get_janela_carga(db, dias=dias)
+    tabelas = [tabela] if tabela else None
+    rotinas = [rotina] if rotina else None
+    rows = get_janela_carga(db, dias=dias, tabelas=tabelas, rotinas=rotinas)
     return {"janela": rows}
 
 
