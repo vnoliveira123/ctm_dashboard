@@ -360,9 +360,9 @@ export const Tela2Execucoes: React.FC = () => {
   const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
   const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
   const { data: rotinasData }        = useRotinasDisponiveis();
-  const { data: slaData }            = useSlaJobs(slaMin);
-  const { data: desvioData }         = useDesvioVolumetria(desvioThreshold);
-  const { data: tendenciaData }      = useTendenciaDuracao();
+  const { data: slaData }            = useSlaJobs(slaMin, filtrosAtivos);
+  const { data: desvioData }         = useDesvioVolumetria(desvioThreshold, filtrosAtivos);
+  const { data: tendenciaData }      = useTendenciaDuracao(filtrosAtivos);
 
   const setStr = (campo: 'data_inicio' | 'data_fim' | 'status') => (v: string) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
@@ -567,7 +567,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'warning.light' }}>
-                    {['Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
+                    {['Rotina', 'Grupo', 'Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -575,6 +575,10 @@ export const Tela2Execucoes: React.FC = () => {
                 <TableBody>
                   {(slaData?.jobs ?? []).map((j: SlaItem, i: number) => (
                     <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela.slice(0, 4)}</TableCell>
+                      <TableCell>
+                        <Chip label={j.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.job}</TableCell>
                       <TableCell>
@@ -627,7 +631,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'warning.light' }}>
-                    {['Tabela', 'Job', 'Dia', 'Observado', 'Baseline (média)', 'Desvio (%)'].map(c => (
+                    {['Rotina', 'Grupo', 'Tabela', 'Job', 'Dia', 'Observado', 'Baseline (média)', 'Desvio (%)'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -635,6 +639,10 @@ export const Tela2Execucoes: React.FC = () => {
                 <TableBody>
                   {(desvioData?.alertas ?? []).map((a: DesvioVolumetriaItem, i: number) => (
                     <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela.slice(0, 4)}</TableCell>
+                      <TableCell>
+                        <Chip label={a.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{a.dia}</TableCell>
@@ -682,7 +690,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'error.light' }}>
-                    {['Tabela', 'Job', 'Última Semana (min)', 'Histórico (min)', 'Variação', 'Semanas'].map(c => (
+                    {['Rotina', 'Grupo', 'Tabela', 'Job', 'Última Semana (min)', 'Histórico (min)', 'Variação', 'Semanas'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -690,6 +698,10 @@ export const Tela2Execucoes: React.FC = () => {
                 <TableBody>
                   {(tendenciaData?.alertas ?? []).map((a: TendenciaDuracaoItem, i: number) => (
                     <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela.slice(0, 4)}</TableCell>
+                      <TableCell>
+                        <Chip label={a.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
                       <TableCell>

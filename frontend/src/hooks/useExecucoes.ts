@@ -47,10 +47,11 @@ export interface GraficosData {
 }
 
 export interface SlaItem {
-  tabela: string;
-  job: string;
-  avg_dur: number;
-  max_dur: number;
+  tabela:     string;
+  job:        string;
+  grupo:      string;
+  avg_dur:    number;
+  max_dur:    number;
   total_exec: number;
 }
 
@@ -98,13 +99,12 @@ export const useRotinasDisponiveis = () =>
     staleTime: 5 * 60 * 1000,
   });
 
-export const useSlaJobs = (slaMinutos: number) =>
+export const useSlaJobs = (slaMinutos: number, filtros: FiltrosExecucao = {}) =>
   useQuery<{ jobs: SlaItem[]; sla_minutos: number }>({
-    queryKey: ['execucoes-sla', slaMinutos],
+    queryKey: ['execucoes-sla', slaMinutos, filtros],
     queryFn: async () => {
-      const { data } = await axios.get(
-        `${API_URL}/api/execucoes/sla?sla_minutos=${slaMinutos}`,
-      );
+      const p = buildParams(filtros, { sla_minutos: String(slaMinutos) });
+      const { data } = await axios.get(`${API_URL}/api/execucoes/sla?${p}`);
       return data;
     },
     staleTime: 2 * 60 * 1000,
@@ -113,19 +113,19 @@ export const useSlaJobs = (slaMinutos: number) =>
 export interface DesvioVolumetriaItem {
   tabela:     string;
   job:        string;
+  grupo:      string;
   dia:        string;
   observado:  number;
   baseline:   number;
   desvio_pct: number;
 }
 
-export const useDesvioVolumetria = (threshold = 50) =>
+export const useDesvioVolumetria = (threshold = 50, filtros: FiltrosExecucao = {}) =>
   useQuery<{ alertas: DesvioVolumetriaItem[]; threshold_pct: number }>({
-    queryKey: ['execucoes-desvio-volumetria', threshold],
+    queryKey: ['execucoes-desvio-volumetria', threshold, filtros],
     queryFn: async () => {
-      const { data } = await axios.get(
-        `${API_URL}/api/execucoes/desvio-volumetria?threshold=${threshold}`,
-      );
+      const p = buildParams(filtros, { threshold: String(threshold) });
+      const { data } = await axios.get(`${API_URL}/api/execucoes/desvio-volumetria?${p}`);
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -134,17 +134,19 @@ export const useDesvioVolumetria = (threshold = 50) =>
 export interface TendenciaDuracaoItem {
   tabela:        string;
   job:           string;
+  grupo:         string;
   dur_ultima:    number;
   dur_historico: number;
   variacao_pct:  number;
   semanas:       { semana: string; avg_dur: number; total: number }[];
 }
 
-export const useTendenciaDuracao = () =>
+export const useTendenciaDuracao = (filtros: FiltrosExecucao = {}) =>
   useQuery<{ alertas: TendenciaDuracaoItem[] }>({
-    queryKey: ['execucoes-tendencia-duracao'],
+    queryKey: ['execucoes-tendencia-duracao', filtros],
     queryFn: async () => {
-      const { data } = await axios.get(`${API_URL}/api/execucoes/tendencia-duracao`);
+      const p = buildParams(filtros);
+      const { data } = await axios.get(`${API_URL}/api/execucoes/tendencia-duracao?${p}`);
       return data;
     },
     staleTime: 5 * 60 * 1000,

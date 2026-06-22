@@ -13,18 +13,38 @@ router = APIRouter()
 
 @router.get("/desvio-volumetria")
 async def obter_desvio_volumetria(
-    threshold: float = Query(50.0, ge=0, le=500),
+    threshold:   float      = Query(50.0, ge=0, le=500),
+    tabela:      List[str]  = Query(default=[]),
+    job:         List[str]  = Query(default=[]),
+    grupo:       List[str]  = Query(default=[]),
+    rotina:      List[str]  = Query(default=[]),
+    data_inicio: Optional[str] = Query(None),
+    data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Jobs com desvio de volume de execuções acima do limiar percentual."""
-    rows = get_desvio_volumetria(db, threshold_pct=threshold)
+    rows = get_desvio_volumetria(
+        db, threshold_pct=threshold,
+        tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
+        data_inicio=data_inicio, data_fim=data_fim,
+    )
     return {"alertas": rows, "threshold_pct": threshold}
 
 
 @router.get("/tendencia-duracao")
-async def obter_tendencia_duracao(db: Session = Depends(get_db)):
-    """Jobs com duração crescente — última semana vs. semanas anteriores."""
-    rows = get_tendencia_duracao(db)
+async def obter_tendencia_duracao(
+    tabela:      List[str]  = Query(default=[]),
+    job:         List[str]  = Query(default=[]),
+    grupo:       List[str]  = Query(default=[]),
+    rotina:      List[str]  = Query(default=[]),
+    data_inicio: Optional[str] = Query(None),
+    data_fim:    Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    rows = get_tendencia_duracao(
+        db,
+        tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
+        data_inicio=data_inicio, data_fim=data_fim,
+    )
     return {"alertas": rows}
 
 
@@ -38,14 +58,21 @@ async def listar_rotinas(db: Session = Depends(get_db)):
 
 @router.get("/sla")
 async def obter_sla_jobs(
-    sla_minutos: float = Query(30.0, ge=0),
+    sla_minutos: float     = Query(30.0, ge=0),
+    tabela:      List[str] = Query(default=[]),
+    job:         List[str] = Query(default=[]),
+    grupo:       List[str] = Query(default=[]),
+    rotina:      List[str] = Query(default=[]),
+    data_inicio: Optional[str] = Query(None),
+    data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Jobs cuja duração média excede o limiar de SLA (em minutos)."""
-    def _fetch():
-        jobs = get_sla_jobs(db, sla_minutos=sla_minutos)
-        return {"jobs": jobs, "sla_minutos": sla_minutos}
-    return get_or_cache(f"cache:execucoes:sla:{sla_minutos}", 300, _fetch)
+    jobs = get_sla_jobs(
+        db, sla_minutos=sla_minutos,
+        tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
+        data_inicio=data_inicio, data_fim=data_fim,
+    )
+    return {"jobs": jobs, "sla_minutos": sla_minutos}
 
 
 @router.get("/graficos")

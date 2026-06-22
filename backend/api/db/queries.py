@@ -635,18 +635,25 @@ def get_alertas_nao_padrao(
     ]
 
 
-def get_sla_jobs(db: Session, sla_minutos: float = 30.0):
+def get_sla_jobs(db: Session, sla_minutos: float = 30.0,
+                 tabelas=None, jobs=None, grupos=None, rotinas=None,
+                 data_inicio=None, data_fim=None):
     """Jobs cuja duração média excede o limiar de SLA configurável."""
-    rows = (
+    base = (
         db.query(
             ExecucaoTimeline.tabela,
             ExecucaoTimeline.job,
+            ExecucaoTimeline.grupo,
             func.avg(ExecucaoTimeline.duracao_minutos).label('avg_dur'),
             func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
             func.count(ExecucaoTimeline.id).label('total_exec'),
         )
         .filter(ExecucaoTimeline.duracao_minutos != None)
-        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
+    )
+    base = _build_exec_filter(base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    rows = (
+        base
+        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job, ExecucaoTimeline.grupo)
         .having(func.avg(ExecucaoTimeline.duracao_minutos) > sla_minutos)
         .order_by(desc('avg_dur'))
         .all()
@@ -655,6 +662,7 @@ def get_sla_jobs(db: Session, sla_minutos: float = 30.0):
         {
             'tabela':     r.tabela,
             'job':        r.job,
+            'grupo':      r.grupo or '',
             'avg_dur':    round(float(r.avg_dur), 2),
             'max_dur':    round(float(r.max_dur), 2),
             'total_exec': int(r.total_exec),
@@ -723,28 +731,34 @@ _MAX_GRAPH_NODES = 1000
 # DESVIO DE VOLUMETRIA
 # ══════════════════════════════════════════════════════════════════
 
-def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
-    """Compara execuções dos últimos 7 dias vs. média do baseline anterior.
-    Retorna jobs com desvio percentual acima do limiar."""
-    rows = db.execute(text("""
+def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0,
+                           tabelas=None, jobs=None, grupos=None, rotinas=None,
+                           data_inicio=None, data_fim=None) -> list:
+    """Compara execuções do período recente vs. baseline anterior, com suporte a filtros."""
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    params = {'threshold': threshold_pct, **cagg_params}
+
+    rows = db.execute(text(f"""
         WITH max_dia AS (
             SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
+            WHERE {cagg_where}
         ),
         total_dias AS (
             SELECT COUNT(DISTINCT dia::date) AS n FROM cagg_execucoes_dia
+            WHERE {cagg_where}
         ),
         corte AS (
-            -- recente = últimos 30% dos dias (min 1, max 7)
             SELECT GREATEST(1, LEAST(7, ROUND(n * 0.3)::int)) AS janela_recente
             FROM total_dias
         ),
         daily AS (
-            SELECT tabela, job, dia::date AS dia, SUM(total) AS execucoes
+            SELECT tabela, job, MIN(grupo) AS grupo, dia::date AS dia, SUM(total) AS execucoes
             FROM cagg_execucoes_dia
+            WHERE {cagg_where}
             GROUP BY tabela, job, dia::date
         ),
         recente AS (
-            SELECT d.tabela, d.job, d.dia, d.execucoes
+            SELECT d.tabela, d.job, d.grupo, d.dia, d.execucoes
             FROM daily d, max_dia m, corte c
             WHERE d.dia > m.ultimo - c.janela_recente
         ),
@@ -756,7 +770,7 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
             HAVING COUNT(*) >= 1
         )
         SELECT
-            r.tabela, r.job, r.dia::text AS dia, r.execucoes AS observado,
+            r.tabela, r.job, r.grupo, r.dia::text AS dia, r.execucoes AS observado,
             ROUND(h.media, 1) AS baseline,
             ROUND((r.execucoes - h.media) / NULLIF(h.media, 0) * 100, 1) AS desvio_pct
         FROM recente r
@@ -764,12 +778,13 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
         WHERE ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) * 100 >= :threshold
         ORDER BY ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) DESC
         LIMIT 200
-    """), {'threshold': threshold_pct}).fetchall()
+    """), params).fetchall()
 
     return [
         {
             'tabela':     r.tabela,
             'job':        r.job,
+            'grupo':      r.grupo or '',
             'dia':        r.dia,
             'observado':  int(r.observado),
             'baseline':   float(r.baseline or 0),
@@ -783,26 +798,33 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
 # TENDÊNCIA DE DURAÇÃO
 # ══════════════════════════════════════════════════════════════════
 
-def get_tendencia_duracao(db: Session) -> list:
+def get_tendencia_duracao(db: Session,
+                          tabelas=None, jobs=None, grupos=None, rotinas=None,
+                          data_inicio=None, data_fim=None) -> list:
     """Compara duração média da última semana vs. semanas anteriores via time_bucket.
-    Retorna jobs com variação acima de 30%."""
+    Retorna jobs com variação acima de 30%, com suporte a filtros."""
     from collections import defaultdict
 
-    rows = db.execute(text("""
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+
+    rows = db.execute(text(f"""
         SELECT
-            tabela, job,
+            tabela, job, MIN(grupo) AS grupo,
             time_bucket('7 days', dia)::date AS semana,
             ROUND((SUM(avg_dur * total) / NULLIF(SUM(total), 0))::numeric, 2) AS avg_dur,
             SUM(total) AS total_exec
         FROM cagg_execucoes_dia
-        WHERE avg_dur IS NOT NULL AND total > 0
+        WHERE avg_dur IS NOT NULL AND total > 0 AND ({cagg_where})
         GROUP BY tabela, job, time_bucket('7 days', dia)
         ORDER BY tabela, job, semana
-    """)).fetchall()
+    """), cagg_params).fetchall()
 
     series_map: dict = defaultdict(list)
+    grupo_map:  dict = {}
     for r in rows:
-        series_map[(r.tabela, r.job)].append({
+        key = (r.tabela, r.job)
+        grupo_map[key] = r.grupo or ''
+        series_map[key].append({
             'semana':  str(r.semana),
             'avg_dur': float(r.avg_dur or 0),
             'total':   int(r.total_exec),
@@ -821,6 +843,7 @@ def get_tendencia_duracao(db: Session) -> list:
             resultado.append({
                 'tabela':        tabela,
                 'job':           job,
+                'grupo':         grupo_map.get((tabela, job), ''),
                 'dur_ultima':    round(dur_ultima, 2),
                 'dur_historico': round(dur_hist,   2),
                 'variacao_pct':  round(var_pct,    1),
