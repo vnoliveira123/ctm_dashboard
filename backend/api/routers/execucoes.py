@@ -3,12 +3,30 @@ from sqlalchemy.orm import Session
 from api.db.database import get_db
 from api.db.queries import (
     get_execucoes, get_execucoes_graficos, get_rotinas_disponiveis, get_sla_jobs,
-    get_desvio_volumetria, get_tendencia_duracao,
+    get_desvio_volumetria, get_tendencia_duracao, get_execucoes_multiplas_por_dia,
 )
 from api.middleware.cache import get_or_cache
 from typing import Optional, List
 
 router = APIRouter()
+
+
+@router.get("/multiplas-por-dia")
+async def obter_multiplas_por_dia(
+    tabela:      List[str]  = Query(default=[]),
+    job:         List[str]  = Query(default=[]),
+    grupo:       List[str]  = Query(default=[]),
+    rotina:      List[str]  = Query(default=[]),
+    data_inicio: Optional[str] = Query(None),
+    data_fim:    Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    tabelas = get_execucoes_multiplas_por_dia(
+        db,
+        tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
+        data_inicio=data_inicio, data_fim=data_fim,
+    )
+    return {"tabelas": tabelas}
 
 
 @router.get("/desvio-volumetria")

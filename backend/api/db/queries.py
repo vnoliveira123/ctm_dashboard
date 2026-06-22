@@ -855,6 +855,80 @@ def get_tendencia_duracao(db: Session,
 
 
 # ══════════════════════════════════════════════════════════════════
+# MÚLTIPLAS EXECUÇÕES POR DIA
+# ══════════════════════════════════════════════════════════════════
+
+def get_execucoes_multiplas_por_dia(
+    db: Session,
+    tabelas=None, jobs=None, grupos=None, rotinas=None,
+    data_inicio=None, data_fim=None,
+) -> list:
+    where_parts = ['1=1']
+    params: dict = {}
+
+    if tabelas:
+        ph = ', '.join(f':t{i}' for i in range(len(tabelas)))
+        where_parts.append(f'tabela IN ({ph})')
+        params.update({f't{i}': v for i, v in enumerate(tabelas)})
+    if jobs:
+        ph = ', '.join(f':j{i}' for i in range(len(jobs)))
+        where_parts.append(f'job IN ({ph})')
+        params.update({f'j{i}': v for i, v in enumerate(jobs)})
+    if grupos:
+        ph = ', '.join(f':g{i}' for i in range(len(grupos)))
+        where_parts.append(f'SUBSTRING(grupo, 1, 4) IN ({ph})')
+        params.update({f'g{i}': v for i, v in enumerate(grupos)})
+    if rotinas:
+        ph = ', '.join(f':r{i}' for i in range(len(rotinas)))
+        where_parts.append(f'SUBSTRING(tabela, 1, 4) IN ({ph})')
+        params.update({f'r{i}': v for i, v in enumerate(rotinas)})
+    if data_inicio:
+        where_parts.append('DATE(data_execucao) >= :data_inicio')
+        params['data_inicio'] = data_inicio
+    if data_fim:
+        where_parts.append('DATE(data_execucao) <= :data_fim')
+        params['data_fim'] = data_fim
+
+    where = ' AND '.join(where_parts)
+
+    sql = f"""
+    WITH diario AS (
+        SELECT
+            tabela,
+            MIN(grupo) AS grupo,
+            DATE(data_execucao) AS dia,
+            COUNT(*) AS execucoes_no_dia
+        FROM mat_execucoes_timeline
+        WHERE {where}
+        GROUP BY tabela, DATE(data_execucao)
+        HAVING COUNT(*) > 1
+    )
+    SELECT
+        tabela,
+        grupo,
+        COUNT(*)              AS dias_com_multiplas,
+        MAX(execucoes_no_dia) AS max_execucoes_dia,
+        SUM(execucoes_no_dia) AS total_execucoes
+    FROM diario
+    GROUP BY tabela, grupo
+    ORDER BY max_execucoes_dia DESC, dias_com_multiplas DESC
+    LIMIT 100
+    """
+
+    rows = db.execute(text(sql), params).fetchall()
+    return [
+        {
+            'tabela':            r.tabela,
+            'grupo':             r.grupo or '',
+            'dias_com_multiplas': int(r.dias_com_multiplas),
+            'max_execucoes_dia': int(r.max_execucoes_dia),
+            'total_execucoes':   int(r.total_execucoes),
+        }
+        for r in rows
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════
 # JANELA DE CARGA
 # ══════════════════════════════════════════════════════════════════
 

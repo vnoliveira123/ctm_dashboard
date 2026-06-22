@@ -141,6 +141,25 @@ export interface TendenciaDuracaoItem {
   semanas:       { semana: string; avg_dur: number; total: number }[];
 }
 
+export interface MultiplasItem {
+  tabela:             string;
+  grupo:              string;
+  dias_com_multiplas: number;
+  max_execucoes_dia:  number;
+  total_execucoes:    number;
+}
+
+export const useMultiplasPorDia = (filtros: FiltrosExecucao = {}) =>
+  useQuery<{ tabelas: MultiplasItem[] }>({
+    queryKey: ['execucoes-multiplas-dia', filtros],
+    queryFn: async () => {
+      const p = buildParams(filtros);
+      const { data } = await axios.get(`${API_URL}/api/execucoes/multiplas-por-dia?${p}`);
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
 export const useTendenciaDuracao = (filtros: FiltrosExecucao = {}) =>
   useQuery<{ alertas: TendenciaDuracaoItem[] }>({
     queryKey: ['execucoes-tendencia-duracao', filtros],
