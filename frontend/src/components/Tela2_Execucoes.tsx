@@ -122,9 +122,7 @@ const GraficoMultiplas: React.FC<{ rows: MultiplasItem[] }> = ({ rows }) => {
           {rows.map((r, i) => (
             <TableRow key={i} hover>
               <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tabela}</TableCell>
-              <TableCell>
-                <Chip label={r.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
-              </TableCell>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{r.grupo?.split('-')[0] || '-'}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{r.max_execucoes_dia}×</TableCell>
               <TableCell sx={{ width: 100 }}>
                 <LinearProgress variant="determinate" value={(r.max_execucoes_dia / maxVal) * 100}
@@ -546,9 +544,10 @@ export const Tela2Execucoes: React.FC = () => {
         </Grid>
         {/* Linha 2: Múltiplas execuções | Ranking de Jobs (tabs) */}
         <Grid item xs={12} md={6}>
-          <ChartCard title="Tabelas com Múltiplas Execuções por Dia">
+          <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Tabelas com Múltiplas Execuções por Dia</Typography>
             <GraficoMultiplas rows={multiplasData?.tabelas ?? []} />
-          </ChartCard>
+          </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
