@@ -44,7 +44,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, rotina=None, grupo_p
                                periodicidade=None, tasktype=None, confirm=None, memlib=None,
                                carga=None, horarios_carga=None,
                                isd=None, evento_isd=None,
-                               tem_alerta=None, padrao=None, tipo_alerta=None):
+                               tem_alerta=None, padrao=None, tipo_alerta=None,
+                               ambientes=None):
     if tabela:
         query = query.filter(Processo.tabela.ilike(f'%{tabela}%'))
     if job:
@@ -79,6 +80,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, rotina=None, grupo_p
         query = query.filter(Processo.tipo_alerta != 'U-ECS')
     if tipo_alerta:
         query = query.filter(Processo.tipo_alerta == tipo_alerta)
+    if ambientes:
+        query = query.filter(Processo.ambiente.in_(ambientes))
     return query
 
 
@@ -87,13 +90,14 @@ def get_processos(db: Session, skip=0, limit=20,
                   periodicidade=None, tasktype=None, confirm=None, memlib=None,
                   carga=None, horarios_carga=None,
                   isd=None, evento_isd=None,
-                  tem_alerta=None, padrao=None, tipo_alerta=None):
+                  tem_alerta=None, padrao=None, tipo_alerta=None, ambientes=None):
 
     filtros = dict(tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
                    periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
                    carga=carga, horarios_carga=horarios_carga,
                    isd=isd, evento_isd=evento_isd,
-                   tem_alerta=tem_alerta, padrao=padrao, tipo_alerta=tipo_alerta)
+                   tem_alerta=tem_alerta, padrao=padrao, tipo_alerta=tipo_alerta,
+                   ambientes=ambientes)
 
     base = _aplicar_filtros_processo(db.query(Processo), **filtros)
     total = base.count()
@@ -111,18 +115,40 @@ def get_processos(db: Session, skip=0, limit=20,
         'jobs_alerta':   base.filter(Processo.tem_alerta == True).count(),
     }
 
+    # Breakdown por ambiente — uma query GROUP BY extra
+    _amb = base.with_entities(
+        Processo.ambiente,
+        func.count(Processo.id).label('jobs'),
+        func.count(func.distinct(Processo.tabela)).label('tabelas'),
+        func.count(func.distinct(case((Processo.carga == 'SIM', Processo.tabela)))).label('t_carga'),
+        func.count(func.distinct(case((Processo.isd   == 'SIM', Processo.tabela)))).label('t_isd'),
+        func.count(func.distinct(case((Processo.tem_alerta == True, Processo.tabela)))).label('t_alerta'),
+        func.count(case((Processo.tem_alerta == True, Processo.id))).label('j_alerta'),
+    ).group_by(Processo.ambiente).all()
+    resumo['por_ambiente'] = {
+        r.ambiente: {
+            'total_jobs':    int(r.jobs),
+            'total_tabelas': int(r.tabelas),
+            'tabelas_carga': int(r.t_carga),
+            'tabelas_isd':   int(r.t_isd),
+            'tabelas_alerta':int(r.t_alerta),
+            'jobs_alerta':   int(r.j_alerta),
+        }
+        for r in _amb if r.ambiente
+    }
+
     processos = base.order_by(Processo.tabela, Processo.job).offset(skip).limit(limit).all()
     return {'processos': processos, 'total': total, 'resumo': resumo}
 
 
 def get_processos_graficos(db: Session, tabela=None, job=None, rotina=None, grupo_prefix=None,
                             periodicidade=None, tasktype=None, confirm=None, memlib=None,
-                            carga=None, isd=None, tem_alerta=None):
+                            carga=None, isd=None, tem_alerta=None, ambientes=None):
     base = _aplicar_filtros_processo(
         db.query(Processo),
         tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
         periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
-        carga=carga, isd=isd, tem_alerta=tem_alerta,
+        carga=carga, isd=isd, tem_alerta=tem_alerta, ambientes=ambientes,
     )
 
     perio_rows = (
@@ -137,7 +163,6 @@ def get_processos_graficos(db: Session, tabela=None, job=None, rotina=None, grup
         base.with_entities(Processo.tabela, func.count(Processo.id).label('total_jobs'))
         .group_by(Processo.tabela)
         .order_by(desc('total_jobs'))
-        .limit(15)
         .all()
     )
 
@@ -189,7 +214,8 @@ def get_tasktypes_disponiveis(db: Session) -> List[str]:
 # ══════════════════════════════════════════════════════════════════
 
 def _build_exec_filter(query, tabelas=None, jobs=None, grupos=None,
-                        rotinas=None, data_inicio=None, data_fim=None, status=None):
+                        rotinas=None, data_inicio=None, data_fim=None, status=None,
+                        ambientes=None):
     if tabelas:
         query = query.filter(or_(*[ExecucaoTimeline.tabela.ilike(f'%{t}%') for t in tabelas]))
     if jobs:
@@ -205,22 +231,25 @@ def _build_exec_filter(query, tabelas=None, jobs=None, grupos=None,
         query = query.filter(ExecucaoTimeline.data_execucao < fim)
     if status:
         query = query.filter(ExecucaoTimeline.status == status)
+    if ambientes:
+        query = query.filter(ExecucaoTimeline.ambiente.in_(ambientes))
     return query
 
 
 def get_execucoes(db: Session, skip=0, limit=20,
                   tabelas=None, jobs=None, grupos=None,
-                  rotinas=None, data_inicio=None, data_fim=None, status=None):
+                  rotinas=None, data_inicio=None, data_fim=None, status=None,
+                  ambientes=None):
     query = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
     )
     total = query.count()
     execucoes = query.order_by(desc(ExecucaoTimeline.data_execucao)).offset(skip).limit(limit).all()
     return {'execucoes': execucoes, 'total': total}
 
 
-def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim):
+def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes=None):
     """WHERE dinâmico para cagg_execucoes_dia com suporte a múltiplos valores."""
     parts: list[str] = []
     params: dict = {}
@@ -256,19 +285,25 @@ def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim):
         parts.append('dia < :dt_fim')
         params['dt_fim'] = (datetime.fromisoformat(data_fim) + timedelta(days=1)).isoformat()
 
+    if ambientes:
+        subs = ' OR '.join(f'ambiente = :a{i}' for i in range(len(ambientes)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(ambientes):
+            params[f'a{i}'] = v
+
     return (' AND '.join(parts) if parts else 'TRUE'), params
 
 
 def _graficos_via_cagg(
     db: Session, base,
-    tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+    tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes=None,
 ) -> dict:
     """
     Gera os dados dos gráficos consultando o Continuous Aggregate cagg_execucoes_dia.
     Resumo e volume diário são calculados a partir de dados pré-computados, sem
     tocar na hypertable de 58 M linhas. Raises se o cagg não estiver disponível.
     """
-    where, params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    where, params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
 
     # ── Resumo: total/ok/nok/avg_dur do cagg ─────────────────────────────────
     # avg_dur ponderada por volume: SUM(avg_dur * total) / SUM(total)
@@ -349,6 +384,27 @@ def _graficos_via_cagg(
         .all()
     )
 
+    # Breakdown por ambiente
+    _amb_res = db.execute(text(f"""
+        SELECT ambiente,
+               SUM(total)                                    AS total,
+               SUM(ok)                                       AS ok,
+               SUM(nok)                                      AS nok,
+               SUM(avg_dur * total) / NULLIF(SUM(total), 0) AS avg_dur
+        FROM cagg_execucoes_dia
+        WHERE {where}
+        GROUP BY ambiente
+    """), params).fetchall()
+    _por_amb = {
+        r.ambiente: {
+            'total':         int(r.total or 0),
+            'ok':            int(r.ok    or 0),
+            'nok':           int(r.nok   or 0),
+            'duracao_media': round(float(r.avg_dur or 0), 2),
+        }
+        for r in _amb_res if r.ambiente
+    }
+
     return {
         'resumo': {
             'total':              total_count,
@@ -357,6 +413,7 @@ def _graficos_via_cagg(
             'duracao_media':      round(avg_dur, 2),
             'job_maior_duracao':  top_job.job      if top_job else '-',
             'maior_duracao':      round(float(top_job.max_dur), 2) if top_job and top_job.max_dur else 0,
+            'por_ambiente':       _por_amb,
         },
         'volume_por_data': [
             {'data': str(r.dt), 'total': _vol_total(r), 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}
@@ -463,16 +520,16 @@ def _graficos_via_orm(db: Session, base, status) -> dict:
 def get_execucoes_graficos(db: Session,
                             tabelas=None, jobs=None, grupos=None,
                             rotinas=None, data_inicio=None, data_fim=None,
-                            status=None):
+                            status=None, ambientes=None):
     base = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
     )
 
     # Caminho rápido: Continuous Aggregate (TimescaleDB)
     try:
         graficos = _graficos_via_cagg(
-            db, base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+            db, base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
         )
     except Exception:
         # Fallback: queries ORM direto na tabela (sem TimescaleDB ou cagg vazio)
@@ -579,7 +636,14 @@ def get_jobs_sem_execucao(db: Session, limit: int = 50):
     ]
 
 
-def get_alertas_nao_padrao(db: Session):
+def get_alertas_nao_padrao(
+    db: Session,
+    tabela: str | None = None,
+    job: str | None = None,
+    rotina: str | None = None,
+    grupo: str | None = None,
+    tipo_alerta: str | None = None,
+):
     """Jobs com alerta cujo tipo_alerta é diferente de 'U-ECS', com volume de execuções."""
     exec_sub = (
         db.query(
@@ -590,7 +654,7 @@ def get_alertas_nao_padrao(db: Session):
         .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
         .subquery()
     )
-    rows = (
+    q = (
         db.query(
             Processo.tabela,
             Processo.job,
@@ -604,9 +668,18 @@ def get_alertas_nao_padrao(db: Session):
         ))
         .filter(Processo.tem_alerta == True)
         .filter(or_(Processo.tipo_alerta == None, Processo.tipo_alerta != 'U-ECS'))
-        .order_by(desc('total_exec'))
-        .all()
     )
+    if tabela:
+        q = q.filter(Processo.tabela.ilike(f'%{tabela}%'))
+    if job:
+        q = q.filter(Processo.job.ilike(f'%{job}%'))
+    if rotina:
+        q = q.filter(func.left(Processo.tabela, 4) == rotina)
+    if grupo:
+        q = q.filter(Processo.grupo.like(f'{grupo}-%'))
+    if tipo_alerta:
+        q = q.filter(Processo.tipo_alerta == tipo_alerta)
+    rows = q.order_by(desc('total_exec')).all()
     return [
         {
             'tabela':      r.tabela,
@@ -619,18 +692,25 @@ def get_alertas_nao_padrao(db: Session):
     ]
 
 
-def get_sla_jobs(db: Session, sla_minutos: float = 30.0):
+def get_sla_jobs(db: Session, sla_minutos: float = 30.0,
+                 tabelas=None, jobs=None, grupos=None, rotinas=None,
+                 data_inicio=None, data_fim=None, ambientes=None):
     """Jobs cuja duração média excede o limiar de SLA configurável."""
-    rows = (
+    base = (
         db.query(
             ExecucaoTimeline.tabela,
             ExecucaoTimeline.job,
+            ExecucaoTimeline.grupo,
             func.avg(ExecucaoTimeline.duracao_minutos).label('avg_dur'),
             func.max(ExecucaoTimeline.duracao_minutos).label('max_dur'),
             func.count(ExecucaoTimeline.id).label('total_exec'),
         )
         .filter(ExecucaoTimeline.duracao_minutos != None)
-        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job)
+    )
+    base = _build_exec_filter(base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes=ambientes)
+    rows = (
+        base
+        .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job, ExecucaoTimeline.grupo)
         .having(func.avg(ExecucaoTimeline.duracao_minutos) > sla_minutos)
         .order_by(desc('avg_dur'))
         .all()
@@ -639,6 +719,7 @@ def get_sla_jobs(db: Session, sla_minutos: float = 30.0):
         {
             'tabela':     r.tabela,
             'job':        r.job,
+            'grupo':      r.grupo or '',
             'avg_dur':    round(float(r.avg_dur), 2),
             'max_dur':    round(float(r.max_dur), 2),
             'total_exec': int(r.total_exec),
@@ -707,28 +788,34 @@ _MAX_GRAPH_NODES = 1000
 # DESVIO DE VOLUMETRIA
 # ══════════════════════════════════════════════════════════════════
 
-def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
-    """Compara execuções dos últimos 7 dias vs. média do baseline anterior.
-    Retorna jobs com desvio percentual acima do limiar."""
-    rows = db.execute(text("""
+def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0,
+                           tabelas=None, jobs=None, grupos=None, rotinas=None,
+                           data_inicio=None, data_fim=None, ambientes=None) -> list:
+    """Compara execuções do período recente vs. baseline anterior, com suporte a filtros."""
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
+    params = {'threshold': threshold_pct, **cagg_params}
+
+    rows = db.execute(text(f"""
         WITH max_dia AS (
             SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
+            WHERE {cagg_where}
         ),
         total_dias AS (
             SELECT COUNT(DISTINCT dia::date) AS n FROM cagg_execucoes_dia
+            WHERE {cagg_where}
         ),
         corte AS (
-            -- recente = últimos 30% dos dias (min 1, max 7)
             SELECT GREATEST(1, LEAST(7, ROUND(n * 0.3)::int)) AS janela_recente
             FROM total_dias
         ),
         daily AS (
-            SELECT tabela, job, dia::date AS dia, SUM(total) AS execucoes
+            SELECT tabela, job, MIN(grupo) AS grupo, dia::date AS dia, SUM(total) AS execucoes
             FROM cagg_execucoes_dia
+            WHERE {cagg_where}
             GROUP BY tabela, job, dia::date
         ),
         recente AS (
-            SELECT d.tabela, d.job, d.dia, d.execucoes
+            SELECT d.tabela, d.job, d.grupo, d.dia, d.execucoes
             FROM daily d, max_dia m, corte c
             WHERE d.dia > m.ultimo - c.janela_recente
         ),
@@ -740,7 +827,7 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
             HAVING COUNT(*) >= 1
         )
         SELECT
-            r.tabela, r.job, r.dia::text AS dia, r.execucoes AS observado,
+            r.tabela, r.job, r.grupo, r.dia::text AS dia, r.execucoes AS observado,
             ROUND(h.media, 1) AS baseline,
             ROUND((r.execucoes - h.media) / NULLIF(h.media, 0) * 100, 1) AS desvio_pct
         FROM recente r
@@ -748,12 +835,13 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
         WHERE ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) * 100 >= :threshold
         ORDER BY ABS((r.execucoes - h.media) / NULLIF(h.media, 0)) DESC
         LIMIT 200
-    """), {'threshold': threshold_pct}).fetchall()
+    """), params).fetchall()
 
     return [
         {
             'tabela':     r.tabela,
             'job':        r.job,
+            'grupo':      r.grupo or '',
             'dia':        r.dia,
             'observado':  int(r.observado),
             'baseline':   float(r.baseline or 0),
@@ -767,26 +855,33 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0) -> list:
 # TENDÊNCIA DE DURAÇÃO
 # ══════════════════════════════════════════════════════════════════
 
-def get_tendencia_duracao(db: Session) -> list:
+def get_tendencia_duracao(db: Session,
+                          tabelas=None, jobs=None, grupos=None, rotinas=None,
+                          data_inicio=None, data_fim=None, ambientes=None) -> list:
     """Compara duração média da última semana vs. semanas anteriores via time_bucket.
-    Retorna jobs com variação acima de 30%."""
+    Retorna jobs com variação acima de 30%, com suporte a filtros."""
     from collections import defaultdict
 
-    rows = db.execute(text("""
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
+
+    rows = db.execute(text(f"""
         SELECT
-            tabela, job,
+            tabela, job, MIN(grupo) AS grupo,
             time_bucket('7 days', dia)::date AS semana,
             ROUND((SUM(avg_dur * total) / NULLIF(SUM(total), 0))::numeric, 2) AS avg_dur,
             SUM(total) AS total_exec
         FROM cagg_execucoes_dia
-        WHERE avg_dur IS NOT NULL AND total > 0
+        WHERE avg_dur IS NOT NULL AND total > 0 AND ({cagg_where})
         GROUP BY tabela, job, time_bucket('7 days', dia)
         ORDER BY tabela, job, semana
-    """)).fetchall()
+    """), cagg_params).fetchall()
 
     series_map: dict = defaultdict(list)
+    grupo_map:  dict = {}
     for r in rows:
-        series_map[(r.tabela, r.job)].append({
+        key = (r.tabela, r.job)
+        grupo_map[key] = r.grupo or ''
+        series_map[key].append({
             'semana':  str(r.semana),
             'avg_dur': float(r.avg_dur or 0),
             'total':   int(r.total_exec),
@@ -805,6 +900,7 @@ def get_tendencia_duracao(db: Session) -> list:
             resultado.append({
                 'tabela':        tabela,
                 'job':           job,
+                'grupo':         grupo_map.get((tabela, job), ''),
                 'dur_ultima':    round(dur_ultima, 2),
                 'dur_historico': round(dur_hist,   2),
                 'variacao_pct':  round(var_pct,    1),
@@ -816,79 +912,318 @@ def get_tendencia_duracao(db: Session) -> list:
 
 
 # ══════════════════════════════════════════════════════════════════
+# MÚLTIPLAS EXECUÇÕES POR DIA
+# ══════════════════════════════════════════════════════════════════
+
+def get_execucoes_multiplas_por_dia(
+    db: Session,
+    tabelas=None, jobs=None, grupos=None, rotinas=None,
+    data_inicio=None, data_fim=None, ambientes=None,
+) -> list:
+    where_parts = ['1=1']
+    params: dict = {}
+
+    if tabelas:
+        ph = ', '.join(f':t{i}' for i in range(len(tabelas)))
+        where_parts.append(f'tabela IN ({ph})')
+        params.update({f't{i}': v for i, v in enumerate(tabelas)})
+    if jobs:
+        ph = ', '.join(f':j{i}' for i in range(len(jobs)))
+        where_parts.append(f'job IN ({ph})')
+        params.update({f'j{i}': v for i, v in enumerate(jobs)})
+    if grupos:
+        ph = ', '.join(f':g{i}' for i in range(len(grupos)))
+        where_parts.append(f'SUBSTRING(grupo, 1, 4) IN ({ph})')
+        params.update({f'g{i}': v for i, v in enumerate(grupos)})
+    if rotinas:
+        ph = ', '.join(f':r{i}' for i in range(len(rotinas)))
+        where_parts.append(f'SUBSTRING(tabela, 1, 4) IN ({ph})')
+        params.update({f'r{i}': v for i, v in enumerate(rotinas)})
+    if data_inicio:
+        where_parts.append('DATE(data_execucao) >= :data_inicio')
+        params['data_inicio'] = data_inicio
+    if data_fim:
+        where_parts.append('DATE(data_execucao) <= :data_fim')
+        params['data_fim'] = data_fim
+    if ambientes:
+        ph = ', '.join(f':ma{i}' for i in range(len(ambientes)))
+        where_parts.append(f'ambiente IN ({ph})')
+        params.update({f'ma{i}': v for i, v in enumerate(ambientes)})
+
+    where = ' AND '.join(where_parts)
+
+    sql = f"""
+    WITH diario AS (
+        SELECT
+            tabela,
+            MIN(grupo) AS grupo,
+            DATE(data_execucao) AS dia,
+            COUNT(*) AS execucoes_no_dia
+        FROM mat_execucoes_timeline
+        WHERE {where}
+        GROUP BY tabela, DATE(data_execucao)
+        HAVING COUNT(*) > 1
+    )
+    SELECT
+        tabela,
+        grupo,
+        COUNT(*)              AS dias_com_multiplas,
+        MAX(execucoes_no_dia) AS max_execucoes_dia,
+        SUM(execucoes_no_dia) AS total_execucoes
+    FROM diario
+    GROUP BY tabela, grupo
+    ORDER BY max_execucoes_dia DESC, dias_com_multiplas DESC
+    LIMIT 100
+    """
+
+    rows = db.execute(text(sql), params).fetchall()
+    return [
+        {
+            'tabela':            r.tabela,
+            'grupo':             r.grupo or '',
+            'dias_com_multiplas': int(r.dias_com_multiplas),
+            'max_execucoes_dia': int(r.max_execucoes_dia),
+            'total_execucoes':   int(r.total_execucoes),
+        }
+        for r in rows
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════
 # JANELA DE CARGA
 # ══════════════════════════════════════════════════════════════════
 
-def get_janela_carga(db: Session, dias: int = 7) -> list:
+_CTM_CUTOVER_H = 7   # virada de data CTM às 07h00
+
+
+def get_janela_carga(db: Session, dias: int = 7,
+                     tabelas=None, rotinas=None, horarios=None, grupos=None) -> list:
     """Compara horario_carga (CTM) com o primeiro início real da tabela (LOG).
-    Retorna apenas tabelas com carga=SIM e horario_carga numérico definido."""
-    rows = db.execute(text("""
-        WITH max_dia AS (
-            SELECT MAX(dia)::date AS ultimo FROM cagg_execucoes_dia
-        ),
-        carga AS (
-            SELECT tabela, MIN(horario_carga::int) AS hora_programada
+
+    Regras de negócio:
+    - Uma tabela só pode estar no prazo ou atrasada — nunca adiantada.
+    - Exibe apenas a ÚLTIMA data de execução de cada tabela (sem repetição).
+    - Delta sempre ≥ 0; considera a virada CTM às 07h00 para cruzamentos de meia-noite.
+    """
+    # Filtros dinâmicos para raw_processos
+    where_parts = [
+        "carga = 'SIM'",
+        "horario_carga IS NOT NULL",
+        "horario_carga ~ '^[0-9]+$'",
+    ]
+    params: dict = {'dias': dias}
+
+    if tabelas:
+        where_parts.append("tabela ILIKE ANY(:tab_filtros)")
+        params['tab_filtros'] = [f'%{t}%' for t in tabelas]
+    if rotinas:
+        where_parts.append("SUBSTRING(tabela, 1, 4) = ANY(:rot_filtros)")
+        params['rot_filtros'] = rotinas
+    if horarios:
+        where_parts.append("horario_carga::int = ANY(:horarios_int)")
+        params['horarios_int'] = [int(h) for h in horarios]
+    if grupos:
+        where_parts.append("SUBSTRING(grupo, 1, 4) = ANY(:grup_filtros)")
+        params['grup_filtros'] = grupos
+
+    where_carga = ' AND '.join(where_parts)
+
+    rows = db.execute(text(f"""
+        WITH carga AS (
+            -- Tabelas com horário de carga programado
+            SELECT tabela, MIN(horario_carga::int) AS hora_programada, MIN(grupo) AS grupo
             FROM raw_processos
-            WHERE carga = 'SIM'
-              AND horario_carga IS NOT NULL
-              AND horario_carga ~ '^[0-9]+$'
+            WHERE {where_carga}
             GROUP BY tabela
         ),
+        ultimo_dia AS (
+            -- Último dia de execução de cada tabela (sem filtro de data — sempre pega o mais recente)
+            SELECT e.tabela, MAX(DATE(e.data_execucao)) AS dia
+            FROM mat_execucoes_timeline e
+            JOIN carga c ON e.tabela = c.tabela
+            GROUP BY e.tabela
+        ),
         primeiros AS (
-            SELECT
-                e.tabela,
-                DATE(e.data_execucao) AS dia,
-                MIN(e.data_execucao)  AS primeiro_inicio
-            FROM mat_execucoes_timeline e, max_dia m
-            WHERE DATE(e.data_execucao) > m.ultimo - :dias
-            GROUP BY e.tabela, DATE(e.data_execucao)
+            -- Primeiro início nesse último dia
+            SELECT e.tabela, MIN(e.data_execucao) AS primeiro_inicio
+            FROM mat_execucoes_timeline e
+            JOIN ultimo_dia u ON e.tabela = u.tabela
+                              AND DATE(e.data_execucao) = u.dia
+            GROUP BY e.tabela
         )
         SELECT
             c.tabela,
             c.hora_programada,
-            p.dia::text AS dia,
+            c.grupo,
+            DATE(p.primeiro_inicio)::text             AS dia,
             p.primeiro_inicio,
             EXTRACT(HOUR   FROM p.primeiro_inicio)::int AS hora_real,
-            EXTRACT(MINUTE FROM p.primeiro_inicio)::int AS min_real,
-            (EXTRACT(HOUR   FROM p.primeiro_inicio) * 60
-             + EXTRACT(MINUTE FROM p.primeiro_inicio)
-             - c.hora_programada * 60)::int AS delta_minutos
+            EXTRACT(MINUTE FROM p.primeiro_inicio)::int AS min_real
         FROM primeiros p
         JOIN carga c USING (tabela)
-        ORDER BY tabela, dia
-    """), {'dias': dias}).fetchall()
+    """), params).fetchall()
 
-    def _normalize(delta: int) -> int:
-        """Ajusta delta para cruzamentos de meia-noite: assume que delta > 12h é adiantamento do dia seguinte."""
-        if delta > 720:   return delta - 1440
-        if delta < -720:  return delta + 1440
-        return delta
+    resultado = []
+    for r in rows:
+        scheduled_min = int(r.hora_programada) * 60
+        actual_min    = int(r.hora_real) * 60 + int(r.min_real)
+        delta         = actual_min - scheduled_min
 
-    def _status(delta: int) -> str:
-        if delta > 30:  return 'atrasada'
-        if delta < -30: return 'adiantada'
-        return 'no_prazo'
+        # Cruzamento de meia-noite: job noturno (ex: prev 23h00, exec 00h10)
+        # Threshold = virada CTM × 60; se delta ficar abaixo disso, somamos 1440
+        if delta < -(_CTM_CUTOVER_H * 60):
+            delta += 1440
 
-    resultado = [
-        {
+        # Tabela nunca pode adiantar — delta mínimo é 0
+        delta = max(0, delta)
+
+        resultado.append({
             'tabela':          r.tabela,
             'hora_programada': int(r.hora_programada),
+            'grupo':           r.grupo or '',
             'dia':             r.dia,
             'primeiro_inicio': r.primeiro_inicio.isoformat() if r.primeiro_inicio else None,
             'hora_real':       int(r.hora_real),
             'min_real':        int(r.min_real),
-            'delta_minutos':   _normalize(int(r.delta_minutos)),
-            'status':          _status(_normalize(int(r.delta_minutos))),
-        }
-        for r in rows
-    ]
-    resultado.sort(key=lambda x: abs(x['delta_minutos']), reverse=True)
+            'delta_minutos':   delta,
+            'status':          'atrasada' if delta > 30 else 'no_prazo',
+        })
+
+    resultado.sort(key=lambda x: x['delta_minutos'], reverse=True)
     return resultado
 
 
+# ══════════════════════════════════════════════════════════════════
+# ANÁLISE PREDITIVA
+# ══════════════════════════════════════════════════════════════════
+
+def get_historico_job_duracao(db: Session, tabela: str, job: str) -> list:
+    """Retorna histórico diário de duração de um job para treinar o preditor."""
+    rows = db.execute(text("""
+        SELECT dia::date AS data,
+               ROUND(avg_dur::numeric, 2) AS duracao,
+               total, ok, nok
+        FROM cagg_execucoes_dia
+        WHERE tabela = :tabela AND job = :job
+          AND avg_dur IS NOT NULL AND total > 0
+        ORDER BY dia
+    """), {'tabela': tabela, 'job': job}).fetchall()
+    return [
+        {
+            'data':    str(r.data),
+            'duracao': float(r.duracao or 0),
+            'total':   int(r.total),
+            'ok':      int(r.ok),
+            'nok':     int(r.nok),
+        }
+        for r in rows
+    ]
+
+
+def get_inicio_medio_jobs_batch(db: Session, job_keys: list) -> dict:
+    """Retorna horário médio de início (min desde meia-noite) para lista de (tabela, job)."""
+    if not job_keys:
+        return {}
+    tabelas = list({t for t, _ in job_keys})
+    jobs_   = list({j for _, j in job_keys})
+    rows = db.execute(text("""
+        SELECT tabela, job,
+               AVG(EXTRACT(HOUR   FROM data_execucao) * 60
+                 + EXTRACT(MINUTE FROM data_execucao)) AS inicio_medio
+        FROM mat_execucoes_timeline
+        WHERE tabela = ANY(:tabs) AND job = ANY(:jobs)
+        GROUP BY tabela, job
+    """), {'tabs': tabelas, 'jobs': jobs_}).fetchall()
+    return {
+        (r.tabela, r.job): float(r.inicio_medio)
+        for r in rows if r.inicio_medio is not None
+    }
+
+
+def get_fluxos_downstream(db: Session, tabela: str, job: str) -> tuple:
+    """BFS a partir de (tabela, job) para encontrar todos os jobs downstream.
+    Retorna (subgraph_adj, all_jobs_set)."""
+    all_fluxos = db.query(Fluxo).all()
+    adj: dict = {}
+    for f in all_fluxos:
+        src  = (f.tabela_origem, f.job_origem)
+        dest = (f.tabela_destino, f.job_destino)
+        adj.setdefault(src, []).append(dest)
+
+    start   = (tabela, job)
+    visited = {start}
+    queue   = [start]
+    subgraph: dict = {}
+
+    while queue:
+        cur       = queue.pop(0)
+        neighbors = adj.get(cur, [])
+        subgraph[cur] = neighbors
+        for dest in neighbors:
+            if dest not in visited:
+                visited.add(dest)
+                queue.append(dest)
+
+    return subgraph, visited
+
+
+def get_caminho_entre_jobs(db: Session, tab_orig: str, job_orig: str,
+                           tab_dest: str, job_dest: str) -> list | None:
+    """Encontra o caminho mais curto (BFS) entre dois jobs no grafo de fluxos.
+    Retorna lista de (tabela, job) do início ao fim, ou None se não existe caminho."""
+    from collections import deque
+
+    all_fluxos = db.query(Fluxo).all()
+    adj: dict = {}
+    for f in all_fluxos:
+        src  = (f.tabela_origem,  f.job_origem)
+        dest = (f.tabela_destino, f.job_destino)
+        adj.setdefault(src, []).append(dest)
+
+    start = (tab_orig, job_orig)
+    end   = (tab_dest, job_dest)
+
+    if start == end:
+        return [start]
+
+    # BFS com predecessor — eficiente para grafos grandes
+    pred: dict = {start: None}
+    queue = deque([start])
+
+    while queue:
+        cur = queue.popleft()
+        for neighbor in adj.get(cur, []):
+            if neighbor not in pred:
+                pred[neighbor] = cur
+                if neighbor == end:
+                    # Reconstrói o caminho
+                    path = []
+                    node = end
+                    while node is not None:
+                        path.append(node)
+                        node = pred[node]
+                    path.reverse()
+                    return path
+                queue.append(neighbor)
+
+    return None
+
+
+def buscar_jobs(db: Session, q: str, limit: int = 30) -> list:
+    """Busca jobs com histórico de execução para autocomplete."""
+    rows = db.execute(text("""
+        SELECT DISTINCT tabela, job
+        FROM mat_execucoes_timeline
+        WHERE tabela ILIKE :q OR job ILIKE :q
+        ORDER BY tabela, job
+        LIMIT :lim
+    """), {'q': f'%{q}%', 'lim': limit}).fetchall()
+    return [{'tabela': r.tabela, 'job': r.job} for r in rows]
+
+
 def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
-                     rotinas=None, posicao=None, carga=None, horario_carga=None,
-                     controle=None):
+                     rotinas=None, ambientes=None, posicao=None, carga=None,
+                     horario_carga=None, controle=None):
     # 1. Filtrar processos
     q = db.query(Processo)
     if grupos:
@@ -899,6 +1234,8 @@ def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
         q = q.filter(or_(*[Processo.job.ilike(f'%{j}%') for j in jobs]))
     if rotinas:
         q = q.filter(func.left(Processo.tabela, 4).in_(rotinas))
+    if ambientes:
+        q = q.filter(Processo.ambiente.in_(ambientes))
     if carga:
         q = q.filter(Processo.carga == carga)
     if horario_carga:
