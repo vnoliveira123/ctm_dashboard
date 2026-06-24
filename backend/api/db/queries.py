@@ -1178,8 +1178,8 @@ def buscar_jobs(db: Session, q: str, limit: int = 30) -> list:
 
 
 def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
-                     rotinas=None, posicao=None, carga=None, horario_carga=None,
-                     controle=None):
+                     rotinas=None, ambientes=None, posicao=None, carga=None,
+                     horario_carga=None, controle=None):
     # 1. Filtrar processos
     q = db.query(Processo)
     if grupos:
@@ -1190,6 +1190,8 @@ def get_fluxos_grafo(db: Session, grupos=None, tabelas=None, jobs=None,
         q = q.filter(or_(*[Processo.job.ilike(f'%{j}%') for j in jobs]))
     if rotinas:
         q = q.filter(func.left(Processo.tabela, 4).in_(rotinas))
+    if ambientes:
+        q = q.filter(Processo.ambiente.in_(ambientes))
     if carga:
         q = q.filter(Processo.carga == carga)
     if horario_carga:

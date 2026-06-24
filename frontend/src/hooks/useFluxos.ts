@@ -8,6 +8,7 @@ export interface FiltrosFluxo {
   tabela?:        string[];
   job?:           string[];
   rotina?:        string[];
+  ambiente?:      string[];
   posicao?:       string;
   carga?:         string;
   horario_carga?: string;
@@ -47,10 +48,11 @@ export const useFluxosGrafo = (filtros: FiltrosFluxo = {}, enabled = true) => {
     enabled,
     queryFn: async () => {
       const p = new URLSearchParams();
-      (filtros.grupo  ?? []).forEach(v => p.append('grupo',  v));
-      (filtros.tabela ?? []).forEach(v => p.append('tabela', v));
-      (filtros.job    ?? []).forEach(v => p.append('job',    v));
-      (filtros.rotina ?? []).forEach(v => p.append('rotina', v));
+      (filtros.grupo    ?? []).forEach(v => p.append('grupo',    v));
+      (filtros.tabela   ?? []).forEach(v => p.append('tabela',   v));
+      (filtros.job      ?? []).forEach(v => p.append('job',      v));
+      (filtros.rotina   ?? []).forEach(v => p.append('rotina',   v));
+      (filtros.ambiente ?? []).forEach(v => p.append('ambiente', v));
       if (filtros.posicao)       p.append('posicao',       filtros.posicao);
       if (filtros.carga)         p.append('carga',         filtros.carga);
       if (filtros.horario_carga) p.append('horario_carga', filtros.horario_carga);

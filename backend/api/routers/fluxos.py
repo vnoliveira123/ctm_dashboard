@@ -25,6 +25,7 @@ async def obter_grafo_fluxos(
     tabela:        List[str] = Query(default=[]),
     job:           List[str] = Query(default=[]),
     rotina:        List[str] = Query(default=[]),
+    ambiente:      List[str] = Query(default=[]),
     posicao:       Optional[str] = Query(None),
     carga:         Optional[str] = Query(None),
     horario_carga: Optional[str] = Query(None),
@@ -35,7 +36,7 @@ async def obter_grafo_fluxos(
     cache_key = (
         f"cache:fluxos:grafo:{','.join(sorted(grupo))}:{','.join(sorted(tabela))}"
         f":{','.join(sorted(job))}:{','.join(sorted(rotina))}"
-        f":{posicao}:{carga}:{horario_carga}:{controle}"
+        f":{','.join(sorted(ambiente))}:{posicao}:{carga}:{horario_carga}:{controle}"
     )
     try:
         return get_or_cache(
@@ -43,7 +44,8 @@ async def obter_grafo_fluxos(
             lambda: get_fluxos_grafo(
                 db,
                 grupos=grupo, tabelas=tabela, jobs=job,
-                rotinas=rotina, posicao=posicao, carga=carga,
+                rotinas=rotina, ambientes=ambiente or None,
+                posicao=posicao, carga=carga,
                 horario_carga=horario_carga, controle=controle,
             ),
         )
