@@ -24,6 +24,7 @@ _INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_timeline_status      ON mat_execucoes_timeline (status)",
     "CREATE INDEX IF NOT EXISTS ix_timeline_grupo       ON mat_execucoes_timeline (grupo)",
     "CREATE INDEX IF NOT EXISTS ix_timeline_rotina      ON mat_execucoes_timeline (left(tabela, 4))",
+    "CREATE INDEX IF NOT EXISTS ix_timeline_ambiente    ON mat_execucoes_timeline (ambiente)",
     # raw_processos
     "CREATE INDEX IF NOT EXISTS ix_processos_tabela     ON raw_processos (tabela)",
     "CREATE INDEX IF NOT EXISTS ix_processos_grupo      ON raw_processos (grupo)",
@@ -101,7 +102,7 @@ def _setup_timescaledb(conn) -> None:
         )
     """, "hypertable")
 
-    # 4. Continuous Aggregate diário — pré-computa OK/NOK/avg_dur por (dia, tabela, job, grupo)
+    # 4. Continuous Aggregate diário — pré-computa OK/NOK/avg_dur por (dia, tabela, job, grupo, ambiente)
     _ts(conn, """
         CREATE MATERIALIZED VIEW IF NOT EXISTS cagg_execucoes_dia
         WITH (timescaledb.continuous) AS
@@ -110,13 +111,14 @@ def _setup_timescaledb(conn) -> None:
             tabela,
             job,
             grupo,
+            ambiente,
             COUNT(*)                                               AS total,
             SUM(CASE WHEN status = 'OK'     THEN 1 ELSE 0 END)    AS ok,
             SUM(CASE WHEN status = 'NOT OK' THEN 1 ELSE 0 END)    AS nok,
             AVG(duracao_minutos)                                   AS avg_dur,
             MAX(duracao_minutos)                                   AS max_dur
         FROM mat_execucoes_timeline
-        GROUP BY dia, tabela, job, grupo
+        GROUP BY dia, tabela, job, grupo, ambiente
         WITH NO DATA
     """, "continuous_aggregate")
 
@@ -152,10 +154,36 @@ def _setup_timescaledb(conn) -> None:
     logger.info('TimescaleDB configurado: hypertable + cagg + compressão')
 
 
+def _migrate_add_ambiente(conn) -> None:
+    """Migration: adds ambiente column to all tables and rebuilds cagg if needed."""
+    cagg_has_amb = conn.execute(text("""
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_name = 'cagg_execucoes_dia' AND column_name = 'ambiente'
+    """)).scalar() or 0
+    if cagg_has_amb:
+        return
+
+    logger.info("Migration: adding 'ambiente' column…")
+    for tbl in ('raw_processos', 'raw_execucoes', 'mat_execucoes_timeline'):
+        try:
+            conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS ambiente VARCHAR(10)"))
+            conn.commit()
+        except Exception as exc:
+            logger.warning("ambiente column on %s: %s", tbl, exc)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    _ts(conn, "DROP MATERIALIZED VIEW IF EXISTS cagg_execucoes_dia CASCADE", "drop_old_cagg")
+    logger.info("cagg_execucoes_dia dropped — will be recreated with ambiente column")
+
+
 def init_db():
     """Cria tabelas, configura TimescaleDB e cria índices."""
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
+        _migrate_add_ambiente(conn)
         _setup_timescaledb(conn)
         for ddl in _INDEXES:
             try:
