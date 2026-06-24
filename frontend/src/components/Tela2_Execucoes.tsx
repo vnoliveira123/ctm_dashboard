@@ -22,9 +22,10 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import BarChartIcon   from '@mui/icons-material/BarChart';
 
-const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
+const GRUPOS    = ['PR12', 'PR21', 'PR31', 'PR41'];
+const AMBIENTES = ['AL1', 'MZ1'];
 
-const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], data_inicio: '', data_fim: '', status: '' };
+const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], ambiente: [], data_inicio: '', data_fim: '', status: '' };
 
 function getFiltrosIniciais(): FiltrosExecucao {
   return { ...FILTROS_VAZIOS };
@@ -365,7 +366,7 @@ export const Tela2Execucoes: React.FC = () => {
 
   const setStr = (campo: 'data_inicio' | 'data_fim' | 'status') => (v: string) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
-  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
+  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina' | 'ambiente') => (v: string[]) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
 
   const aplicar = () => {
@@ -446,6 +447,18 @@ export const Tela2Execucoes: React.FC = () => {
                   value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
                 }
                 renderInput={(params) => <TextField {...params} label="Rotina" size="small" sx={{ minWidth: 160 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={AMBIENTES}
+                value={filtros.ambiente ?? []}
+                onChange={(_, v) => setArr('ambiente')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" color="info" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Ambiente" size="small" sx={{ minWidth: 140 }} />}
               />
               <TextField label="Data Início" type="date" value={filtros.data_inicio} size="small"
                          InputLabelProps={{ shrink: true }} onChange={e => setStr('data_inicio')(e.target.value)} />

@@ -44,7 +44,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, rotina=None, grupo_p
                                periodicidade=None, tasktype=None, confirm=None, memlib=None,
                                carga=None, horarios_carga=None,
                                isd=None, evento_isd=None,
-                               tem_alerta=None, padrao=None, tipo_alerta=None):
+                               tem_alerta=None, padrao=None, tipo_alerta=None,
+                               ambientes=None):
     if tabela:
         query = query.filter(Processo.tabela.ilike(f'%{tabela}%'))
     if job:
@@ -79,6 +80,8 @@ def _aplicar_filtros_processo(query, tabela=None, job=None, rotina=None, grupo_p
         query = query.filter(Processo.tipo_alerta != 'U-ECS')
     if tipo_alerta:
         query = query.filter(Processo.tipo_alerta == tipo_alerta)
+    if ambientes:
+        query = query.filter(Processo.ambiente.in_(ambientes))
     return query
 
 
@@ -87,13 +90,14 @@ def get_processos(db: Session, skip=0, limit=20,
                   periodicidade=None, tasktype=None, confirm=None, memlib=None,
                   carga=None, horarios_carga=None,
                   isd=None, evento_isd=None,
-                  tem_alerta=None, padrao=None, tipo_alerta=None):
+                  tem_alerta=None, padrao=None, tipo_alerta=None, ambientes=None):
 
     filtros = dict(tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
                    periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
                    carga=carga, horarios_carga=horarios_carga,
                    isd=isd, evento_isd=evento_isd,
-                   tem_alerta=tem_alerta, padrao=padrao, tipo_alerta=tipo_alerta)
+                   tem_alerta=tem_alerta, padrao=padrao, tipo_alerta=tipo_alerta,
+                   ambientes=ambientes)
 
     base = _aplicar_filtros_processo(db.query(Processo), **filtros)
     total = base.count()
@@ -117,12 +121,12 @@ def get_processos(db: Session, skip=0, limit=20,
 
 def get_processos_graficos(db: Session, tabela=None, job=None, rotina=None, grupo_prefix=None,
                             periodicidade=None, tasktype=None, confirm=None, memlib=None,
-                            carga=None, isd=None, tem_alerta=None):
+                            carga=None, isd=None, tem_alerta=None, ambientes=None):
     base = _aplicar_filtros_processo(
         db.query(Processo),
         tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo_prefix,
         periodicidade=periodicidade, tasktype=tasktype, confirm=confirm, memlib=memlib,
-        carga=carga, isd=isd, tem_alerta=tem_alerta,
+        carga=carga, isd=isd, tem_alerta=tem_alerta, ambientes=ambientes,
     )
 
     perio_rows = (
@@ -188,7 +192,8 @@ def get_tasktypes_disponiveis(db: Session) -> List[str]:
 # ══════════════════════════════════════════════════════════════════
 
 def _build_exec_filter(query, tabelas=None, jobs=None, grupos=None,
-                        rotinas=None, data_inicio=None, data_fim=None, status=None):
+                        rotinas=None, data_inicio=None, data_fim=None, status=None,
+                        ambientes=None):
     if tabelas:
         query = query.filter(or_(*[ExecucaoTimeline.tabela.ilike(f'%{t}%') for t in tabelas]))
     if jobs:
@@ -204,22 +209,25 @@ def _build_exec_filter(query, tabelas=None, jobs=None, grupos=None,
         query = query.filter(ExecucaoTimeline.data_execucao < fim)
     if status:
         query = query.filter(ExecucaoTimeline.status == status)
+    if ambientes:
+        query = query.filter(ExecucaoTimeline.ambiente.in_(ambientes))
     return query
 
 
 def get_execucoes(db: Session, skip=0, limit=20,
                   tabelas=None, jobs=None, grupos=None,
-                  rotinas=None, data_inicio=None, data_fim=None, status=None):
+                  rotinas=None, data_inicio=None, data_fim=None, status=None,
+                  ambientes=None):
     query = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
     )
     total = query.count()
     execucoes = query.order_by(desc(ExecucaoTimeline.data_execucao)).offset(skip).limit(limit).all()
     return {'execucoes': execucoes, 'total': total}
 
 
-def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim):
+def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes=None):
     """WHERE dinâmico para cagg_execucoes_dia com suporte a múltiplos valores."""
     parts: list[str] = []
     params: dict = {}
@@ -255,19 +263,25 @@ def _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim):
         parts.append('dia < :dt_fim')
         params['dt_fim'] = (datetime.fromisoformat(data_fim) + timedelta(days=1)).isoformat()
 
+    if ambientes:
+        subs = ' OR '.join(f'ambiente = :a{i}' for i in range(len(ambientes)))
+        parts.append(f'({subs})')
+        for i, v in enumerate(ambientes):
+            params[f'a{i}'] = v
+
     return (' AND '.join(parts) if parts else 'TRUE'), params
 
 
 def _graficos_via_cagg(
     db: Session, base,
-    tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+    tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes=None,
 ) -> dict:
     """
     Gera os dados dos gráficos consultando o Continuous Aggregate cagg_execucoes_dia.
     Resumo e volume diário são calculados a partir de dados pré-computados, sem
     tocar na hypertable de 58 M linhas. Raises se o cagg não estiver disponível.
     """
-    where, params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    where, params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
 
     # ── Resumo: total/ok/nok/avg_dur do cagg ─────────────────────────────────
     # avg_dur ponderada por volume: SUM(avg_dur * total) / SUM(total)
@@ -462,16 +476,16 @@ def _graficos_via_orm(db: Session, base, status) -> dict:
 def get_execucoes_graficos(db: Session,
                             tabelas=None, jobs=None, grupos=None,
                             rotinas=None, data_inicio=None, data_fim=None,
-                            status=None):
+                            status=None, ambientes=None):
     base = _build_exec_filter(
         db.query(ExecucaoTimeline),
-        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+        tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
     )
 
     # Caminho rápido: Continuous Aggregate (TimescaleDB)
     try:
         graficos = _graficos_via_cagg(
-            db, base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status,
+            db, base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, status, ambientes,
         )
     except Exception:
         # Fallback: queries ORM direto na tabela (sem TimescaleDB ou cagg vazio)
@@ -636,7 +650,7 @@ def get_alertas_nao_padrao(
 
 def get_sla_jobs(db: Session, sla_minutos: float = 30.0,
                  tabelas=None, jobs=None, grupos=None, rotinas=None,
-                 data_inicio=None, data_fim=None):
+                 data_inicio=None, data_fim=None, ambientes=None):
     """Jobs cuja duração média excede o limiar de SLA configurável."""
     base = (
         db.query(
@@ -649,7 +663,7 @@ def get_sla_jobs(db: Session, sla_minutos: float = 30.0,
         )
         .filter(ExecucaoTimeline.duracao_minutos != None)
     )
-    base = _build_exec_filter(base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    base = _build_exec_filter(base, tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes=ambientes)
     rows = (
         base
         .group_by(ExecucaoTimeline.tabela, ExecucaoTimeline.job, ExecucaoTimeline.grupo)
@@ -732,9 +746,9 @@ _MAX_GRAPH_NODES = 1000
 
 def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0,
                            tabelas=None, jobs=None, grupos=None, rotinas=None,
-                           data_inicio=None, data_fim=None) -> list:
+                           data_inicio=None, data_fim=None, ambientes=None) -> list:
     """Compara execuções do período recente vs. baseline anterior, com suporte a filtros."""
-    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
     params = {'threshold': threshold_pct, **cagg_params}
 
     rows = db.execute(text(f"""
@@ -799,12 +813,12 @@ def get_desvio_volumetria(db: Session, threshold_pct: float = 50.0,
 
 def get_tendencia_duracao(db: Session,
                           tabelas=None, jobs=None, grupos=None, rotinas=None,
-                          data_inicio=None, data_fim=None) -> list:
+                          data_inicio=None, data_fim=None, ambientes=None) -> list:
     """Compara duração média da última semana vs. semanas anteriores via time_bucket.
     Retorna jobs com variação acima de 30%, com suporte a filtros."""
     from collections import defaultdict
 
-    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim)
+    cagg_where, cagg_params = _build_cagg_where(tabelas, jobs, grupos, rotinas, data_inicio, data_fim, ambientes)
 
     rows = db.execute(text(f"""
         SELECT
@@ -860,7 +874,7 @@ def get_tendencia_duracao(db: Session,
 def get_execucoes_multiplas_por_dia(
     db: Session,
     tabelas=None, jobs=None, grupos=None, rotinas=None,
-    data_inicio=None, data_fim=None,
+    data_inicio=None, data_fim=None, ambientes=None,
 ) -> list:
     where_parts = ['1=1']
     params: dict = {}
@@ -887,6 +901,10 @@ def get_execucoes_multiplas_por_dia(
     if data_fim:
         where_parts.append('DATE(data_execucao) <= :data_fim')
         params['data_fim'] = data_fim
+    if ambientes:
+        ph = ', '.join(f':ma{i}' for i in range(len(ambientes)))
+        where_parts.append(f'ambiente IN ({ph})')
+        params.update({f'ma{i}': v for i, v in enumerate(ambientes)})
 
     where = ' AND '.join(where_parts)
 

@@ -17,6 +17,7 @@ async def obter_multiplas_por_dia(
     job:         List[str]  = Query(default=[]),
     grupo:       List[str]  = Query(default=[]),
     rotina:      List[str]  = Query(default=[]),
+    ambiente:    List[str]  = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -24,7 +25,7 @@ async def obter_multiplas_por_dia(
     tabelas = get_execucoes_multiplas_por_dia(
         db,
         tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
-        data_inicio=data_inicio, data_fim=data_fim,
+        data_inicio=data_inicio, data_fim=data_fim, ambientes=ambiente or None,
     )
     return {"tabelas": tabelas}
 
@@ -36,6 +37,7 @@ async def obter_desvio_volumetria(
     job:         List[str]  = Query(default=[]),
     grupo:       List[str]  = Query(default=[]),
     rotina:      List[str]  = Query(default=[]),
+    ambiente:    List[str]  = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -43,7 +45,7 @@ async def obter_desvio_volumetria(
     rows = get_desvio_volumetria(
         db, threshold_pct=threshold,
         tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
-        data_inicio=data_inicio, data_fim=data_fim,
+        data_inicio=data_inicio, data_fim=data_fim, ambientes=ambiente or None,
     )
     return {"alertas": rows, "threshold_pct": threshold}
 
@@ -54,6 +56,7 @@ async def obter_tendencia_duracao(
     job:         List[str]  = Query(default=[]),
     grupo:       List[str]  = Query(default=[]),
     rotina:      List[str]  = Query(default=[]),
+    ambiente:    List[str]  = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -61,7 +64,7 @@ async def obter_tendencia_duracao(
     rows = get_tendencia_duracao(
         db,
         tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
-        data_inicio=data_inicio, data_fim=data_fim,
+        data_inicio=data_inicio, data_fim=data_fim, ambientes=ambiente or None,
     )
     return {"alertas": rows}
 
@@ -81,6 +84,7 @@ async def obter_sla_jobs(
     job:         List[str] = Query(default=[]),
     grupo:       List[str] = Query(default=[]),
     rotina:      List[str] = Query(default=[]),
+    ambiente:    List[str] = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim:    Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -88,7 +92,7 @@ async def obter_sla_jobs(
     jobs = get_sla_jobs(
         db, sla_minutos=sla_minutos,
         tabelas=tabela or None, jobs=job or None, grupos=grupo or None, rotinas=rotina or None,
-        data_inicio=data_inicio, data_fim=data_fim,
+        data_inicio=data_inicio, data_fim=data_fim, ambientes=ambiente or None,
     )
     return {"jobs": jobs, "sla_minutos": sla_minutos}
 
@@ -99,6 +103,7 @@ async def obter_graficos(
     job: List[str] = Query(default=[]),
     grupo: List[str] = Query(default=[]),
     rotina: List[str] = Query(default=[]),
+    ambiente: List[str] = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -108,7 +113,7 @@ async def obter_graficos(
         db,
         tabelas=tabela, jobs=job, grupos=grupo,
         rotinas=rotina, data_inicio=data_inicio, data_fim=data_fim,
-        status=status,
+        status=status, ambientes=ambiente or None,
     )
 
 
@@ -118,6 +123,7 @@ async def listar_execucoes(
     job: List[str] = Query(default=[]),
     grupo: List[str] = Query(default=[]),
     rotina: List[str] = Query(default=[]),
+    ambiente: List[str] = Query(default=[]),
     data_inicio: Optional[str] = Query(None),
     data_fim: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -129,7 +135,8 @@ async def listar_execucoes(
     resultado = get_execucoes(
         db, skip=skip, limit=limit,
         tabelas=tabela, jobs=job, grupos=grupo,
-        rotinas=rotina, data_inicio=data_inicio, data_fim=data_fim, status=status,
+        rotinas=rotina, data_inicio=data_inicio, data_fim=data_fim,
+        status=status, ambientes=ambiente or None,
     )
     return {
         "execucoes": [
@@ -140,6 +147,7 @@ async def listar_execucoes(
                 "data_execucao": e.data_execucao.isoformat() if e.data_execucao else None,
                 "status": e.status,
                 "duracao_minutos": round(float(e.duracao_minutos), 2) if e.duracao_minutos else None,
+                "ambiente": e.ambiente,
             }
             for e in resultado["execucoes"]
         ],

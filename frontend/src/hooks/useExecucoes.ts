@@ -8,6 +8,7 @@ export interface FiltrosExecucao {
   job?: string[];
   grupo?: string[];
   rotina?: string[];
+  ambiente?: string[];
   data_inicio?: string;
   data_fim?: string;
   status?: string;
@@ -57,10 +58,11 @@ export interface SlaItem {
 
 function buildParams(filtros: FiltrosExecucao, extra?: Record<string, string>) {
   const p = new URLSearchParams();
-  (filtros.tabela ?? []).forEach(v => p.append('tabela', v));
-  (filtros.job    ?? []).forEach(v => p.append('job',    v));
-  (filtros.grupo  ?? []).forEach(v => p.append('grupo',  v));
-  (filtros.rotina ?? []).forEach(v => p.append('rotina', v));
+  (filtros.tabela   ?? []).forEach(v => p.append('tabela',   v));
+  (filtros.job      ?? []).forEach(v => p.append('job',      v));
+  (filtros.grupo    ?? []).forEach(v => p.append('grupo',    v));
+  (filtros.rotina   ?? []).forEach(v => p.append('rotina',   v));
+  (filtros.ambiente ?? []).forEach(v => p.append('ambiente', v));
   if (filtros.data_inicio) p.append('data_inicio', filtros.data_inicio);
   if (filtros.data_fim)    p.append('data_fim',    filtros.data_fim);
   if (filtros.status)      p.append('status',      filtros.status);

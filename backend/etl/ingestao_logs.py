@@ -14,7 +14,7 @@ _CHUNK_SIZE = 100_000
 _INSERT_SQL = """
     INSERT INTO raw_execucoes
         (tabela, job, grupo, inicio, fim, status,
-         hora_proc, minutos_proc, execucoes, data_insercao)
+         hora_proc, minutos_proc, execucoes, ambiente, data_insercao)
     VALUES %s
 """
 
@@ -118,11 +118,16 @@ def ingerir_logs_incremental(
                 hora_list     = chunk['HORA_PROC'].where(chunk['HORA_PROC'].notna(), None).tolist()
                 min_proc_list = chunk['_min_proc'].where(chunk['_min_proc'].notna(), None).tolist()
                 exec_list     = chunk['_execucoes'].tolist()
+                amb_list      = (
+                    chunk['AMBIENTE'].where(chunk['AMBIENTE'].notna(), None).tolist()
+                    if 'AMBIENTE' in chunk.columns else [None] * len(chunk)
+                )
 
                 tuples = list(zip(
                     tabela_list, job_list, grupo_list,
                     inicio_list, fim_list, status_list,
                     hora_list, min_proc_list, exec_list,
+                    amb_list,
                     [_now] * len(chunk),
                 ))
 

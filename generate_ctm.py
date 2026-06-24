@@ -40,7 +40,7 @@ FIELDNAMES = [
     'ISD', 'EVENTO_ISD', 'TEM_ALERTA', 'ALERTA_CONFIG', 'TIPO_ALERTA',
     'PADRAO', 'MAXQAIT', 'FROMTIME', 'UNTILTIME', 'CONFIRM', 'MEMLIB',
     'RESOURCE', 'PERIODICIDADE', 'CALENDARIO', 'INTERSIT',
-    'IN_COUNDS', 'OUT_COUNDS', 'COMENTARIO',
+    'IN_COUNDS', 'OUT_COUNDS', 'COMENTARIO', 'AMBIENTE',
 ]
 
 
@@ -62,7 +62,7 @@ def make_condition(job_from, job_to):
     return f'{job_from}-{job_to}-JBODAT'
 
 
-def generate_table(table_base, grupo, num_jobs):
+def generate_table(table_base, grupo, num_jobs, ambiente='AL1'):
     jobs      = [f'{table_base}{i:03d}' for i in range(num_jobs)]
     tabela    = jobs[0]
     tasktype  = random.choice(TASKTYPES)
@@ -120,6 +120,7 @@ def generate_table(table_base, grupo, num_jobs):
             'IN_COUNDS':     in_conds,
             'OUT_COUNDS':    '\n'.join(out_parts),
             'COMENTARIO':    random.choice(COMENTARIOS),
+            'AMBIENTE':      ambiente,
         })
     return rows
 
@@ -143,9 +144,11 @@ print(f'Gerando {N_TABLES:,} tabelas -> {N_5JOB_TABLES:,}x5 + {N_4JOB_TABLES:,}x
 with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=FIELDNAMES, delimiter='|')
     writer.writeheader()
-    for base, n_jobs in zip(TABLE_BASES, job_counts):
-        grupo = random.choice(GRUPOS_PREFIX)
-        rows  = generate_table(base, grupo, n_jobs)
+    half = N_TABLES // 2
+    for idx, (base, n_jobs) in enumerate(zip(TABLE_BASES, job_counts)):
+        grupo    = random.choice(GRUPOS_PREFIX)
+        ambiente = AMBIENTES[0] if idx < half else AMBIENTES[1]
+        rows     = generate_table(base, grupo, n_jobs, ambiente)
         writer.writerows(rows)
         total_jobs   += len(rows)
         total_tables += 1

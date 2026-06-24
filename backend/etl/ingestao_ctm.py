@@ -82,6 +82,7 @@ def ingerir_ctm(arquivo_csv: str, db: Session) -> int:
                 'in_counds':        _clean(row.get('IN_COUNDS')),
                 'out_counds':       _clean(row.get('OUT_COUNDS')),
                 'comentario':       _clean(row.get('COMENTARIO')),
+                'ambiente':         _clean(row.get('AMBIENTE')),
                 'data_insercao':    _now,
                 'data_atualizacao': _now,
             })

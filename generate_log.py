@@ -29,7 +29,7 @@ MAX_ROWS = 100_000
 FIELDNAMES = [
     'TABELA', 'JOB', 'GRUPO',
     'INICIO', 'FIM', 'STATUS',
-    'HORA_PROC', 'MINUTOS_PROC', 'EXECUCOES',
+    'HORA_PROC', 'MINUTOS_PROC', 'EXECUCOES', 'AMBIENTE',
 ]
 
 
@@ -73,6 +73,7 @@ def gerar_execucoes(row: dict, data_base: datetime) -> list[dict]:
     tabela   = row['TABELA']
     job      = row['JOB']
     grupo    = row['GRUPO']
+    ambiente = row.get('AMBIENTE', '')
     base_h, base_m = parse_horario(row)
 
     jitter  = timedelta(minutes=random.randint(-20, 20))
@@ -104,6 +105,7 @@ def gerar_execucoes(row: dict, data_base: datetime) -> list[dict]:
             'HORA_PROC':    hora_proc(delta),
             'MINUTOS_PROC': minutos_proc(delta),
             'EXECUCOES':    n_exec,
+            'AMBIENTE':     ambiente,
         })
         cur_inicio = cur_fim + timedelta(minutes=random.randint(10, 40))
 

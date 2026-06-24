@@ -38,6 +38,7 @@ async def obter_graficos_processos(
     carga: Optional[str] = Query(None),
     isd: Optional[str] = Query(None),
     tem_alerta: Optional[str] = Query(None),
+    ambiente: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
 ):
     tem_alerta_bool = None
@@ -48,6 +49,7 @@ async def obter_graficos_processos(
         db, tabela=tabela, job=job, rotina=rotina, grupo_prefix=grupo,
         periodicidade=periodicidade, tasktype=tasktype, confirm=confirm,
         memlib=memlib, carga=carga, isd=isd, tem_alerta=tem_alerta_bool,
+        ambientes=ambiente or None,
     )
 
 
@@ -118,6 +120,7 @@ async def listar_processos(
     tem_alerta: Optional[str] = Query(None),
     padrao: Optional[str] = Query(None),
     tipo_alerta: Optional[str] = Query(None),
+    ambiente: List[str] = Query(default=[]),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -141,6 +144,7 @@ async def listar_processos(
         carga=carga, horarios_carga=horarios_list,
         isd=isd, evento_isd=evento_isd,
         tem_alerta=tem_alerta_bool, padrao=padrao, tipo_alerta=tipo_alerta,
+        ambientes=ambiente or None,
     )
 
     return {
@@ -164,6 +168,7 @@ async def listar_processos(
                 "resource": p.resource,
                 "fromtime": p.fromtime,
                 "untiltime": p.untiltime,
+                "ambiente": p.ambiente,
             }
             for p in resultado["processos"]
         ],

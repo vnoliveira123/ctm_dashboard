@@ -19,6 +19,7 @@ export interface FiltrosProcesso {
   tem_alerta?: string;
   padrao?: string;
   tipo_alerta?: string;
+  ambiente?: string[];
 }
 
 export interface ProcessoItem {
@@ -87,6 +88,7 @@ export const useProcessos = (filtros: FiltrosProcesso = {}, page: number = 1) =>
       if (filtros.tem_alerta) params.append('tem_alerta', filtros.tem_alerta);
       if (filtros.padrao) params.append('padrao', filtros.padrao);
       if (filtros.tipo_alerta) params.append('tipo_alerta', filtros.tipo_alerta);
+      (filtros.ambiente ?? []).forEach(v => params.append('ambiente', v));
       params.append('page', page.toString());
       params.append('limit', '20');
       const { data } = await axios.get(`${API_URL}/api/processos?${params}`);
@@ -111,6 +113,7 @@ export const useGraficosProcessos = (filtros: FiltrosProcesso = {}) =>
       if (filtros.carga)         params.append('carga',         filtros.carga);
       if (filtros.isd)           params.append('isd',           filtros.isd);
       if (filtros.tem_alerta)    params.append('tem_alerta',    filtros.tem_alerta);
+      (filtros.ambiente ?? []).forEach(v => params.append('ambiente', v));
       const { data } = await axios.get(`${API_URL}/api/processos/graficos?${params}`);
       return data;
     },

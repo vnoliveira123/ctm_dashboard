@@ -23,6 +23,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const GRUPOS      = ['PR12', 'PR21', 'PR31', 'PR41'];
+const AMBIENTES   = ['AL1', 'MZ1'];
 const HORARIOS    = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
 const MEMLIBS     = ['MX.JCLFILE','MX.CTMR.PR12.SCHEFILE','MX.CTMR.PR21.SCHEFILE','MX.CTMR.PR31.SCHEFILE','MX.CTMR.PR41.SCHEFILE','DUMMY'];
 const EVENTOS_ISD = ['FORCE TABELA', 'FORCE JOB', 'ADICIONA CONDIÇÃO'];
@@ -36,7 +37,7 @@ const CORES_PERIOD = [
 const FILTROS_VAZIOS: FiltrosProcesso = {
   tabela: '', job: '', rotina: '', grupo: '', periodicidade: '', tasktype: '', confirm: '', memlib: '',
   carga: '', horarios_carga: [], isd: '', evento_isd: '',
-  tem_alerta: '', padrao: '', tipo_alerta: '',
+  tem_alerta: '', padrao: '', tipo_alerta: '', ambiente: [],
 };
 
 
@@ -295,6 +296,20 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
               />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
                 opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={130} />
+              <Autocomplete
+                multiple disableCloseOnSelect options={AMBIENTES}
+                value={filtros.ambiente ?? []}
+                onChange={(_, v) => setFiltros(f => ({ ...f, ambiente: v }))}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" color="info" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Ambiente" size="small" sx={{ minWidth: 140 }} />}
+                size="small"
+                sx={{ minWidth: 140, flexShrink: 0 }}
+              />
               <SelectFiltro label="Tipo" value={filtros.tasktype || ''} onChange={set('tasktype')}
                 opcoes={(opcoes?.tasktypes || []).map(t => ({ value: t, label: t }))} minWidth={120} />
               <SelectFiltro label="Periodicidade" value={filtros.periodicidade || ''} onChange={set('periodicidade')}

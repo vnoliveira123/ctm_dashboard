@@ -94,7 +94,7 @@ def agregar_execucoes_timeline(db: Session) -> int:
         # INSERT...SELECT: processamento 100% server-side — zero tráfego Python
         db.execute(text('''
             INSERT INTO mat_execucoes_timeline
-                (tabela, job, grupo, data_execucao, status, duracao_minutos, data_atualizacao)
+                (tabela, job, grupo, data_execucao, status, duracao_minutos, ambiente, data_atualizacao)
             SELECT
                 tabela,
                 job,
@@ -102,6 +102,7 @@ def agregar_execucoes_timeline(db: Session) -> int:
                 inicio        AS data_execucao,
                 status,
                 minutos_proc  AS duracao_minutos,
+                ambiente,
                 NOW()         AS data_atualizacao
             FROM raw_execucoes
             WHERE inicio IS NOT NULL
