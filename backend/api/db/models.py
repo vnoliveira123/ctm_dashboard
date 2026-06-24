@@ -32,6 +32,7 @@ class Processo(Base):
     in_counds = Column(Text)
     out_counds = Column(Text)
     comentario = Column(Text)
+    ambiente = Column(String(10))
     data_insercao = Column(DateTime, default=datetime.utcnow)
     data_atualizacao = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -49,6 +50,7 @@ class Execucao(Base):
     hora_proc = Column(String(20))
     minutos_proc = Column(Float)
     execucoes = Column(Integer, default=1)
+    ambiente = Column(String(10))
     data_insercao = Column(DateTime, default=datetime.utcnow)
 
 
@@ -95,4 +97,5 @@ class ExecucaoTimeline(Base):
     data_execucao = Column(DateTime, nullable=False, primary_key=True)
     status        = Column(String(50), nullable=False)
     duracao_minutos  = Column(Float)
+    ambiente         = Column(String(10))
     data_atualizacao = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
