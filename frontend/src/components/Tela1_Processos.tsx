@@ -24,6 +24,10 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 // ── Constantes ────────────────────────────────────────────────────────────────
 const GRUPOS      = ['PR12', 'PR21', 'PR31', 'PR41'];
 const AMBIENTES   = ['AL1', 'MZ1'];
+const AMB_COLORS: Record<string, { bg: string; text: string }> = {
+  AL1: { bg: '#e3f2fd', text: '#1565c0' },
+  MZ1: { bg: '#e8f5e9', text: '#1b5e20' },
+};
 const HORARIOS    = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
 const MEMLIBS     = ['MX.JCLFILE','MX.CTMR.PR12.SCHEFILE','MX.CTMR.PR21.SCHEFILE','MX.CTMR.PR31.SCHEFILE','MX.CTMR.PR41.SCHEFILE','DUMMY'];
 const EVENTOS_ISD = ['FORCE TABELA', 'FORCE JOB', 'ADICIONA CONDIÇÃO'];
@@ -187,16 +191,19 @@ const AmbSplit: React.FC<{ por: Record<string, number> }> = ({ por }) => {
   if (!entries.length) return null;
   return (
     <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
-      {entries.map(([amb, val]) => (
-        <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
-          <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-            {amb}
-          </Typography>
-          <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3 }}>
-            {val.toLocaleString('pt-BR')}
-          </Typography>
-        </Box>
-      ))}
+      {entries.map(([amb, val]) => {
+        const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+        return (
+          <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+            <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+              {amb}
+            </Typography>
+            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
+              {val.toLocaleString('pt-BR')}
+            </Typography>
+          </Box>
+        );
+      })}
     </Box>
   );
 };

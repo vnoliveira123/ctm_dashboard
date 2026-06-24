@@ -24,6 +24,10 @@ import BarChartIcon   from '@mui/icons-material/BarChart';
 
 const GRUPOS    = ['PR12', 'PR21', 'PR31', 'PR41'];
 const AMBIENTES = ['AL1', 'MZ1'];
+const AMB_COLORS: Record<string, { bg: string; text: string }> = {
+  AL1: { bg: '#e3f2fd', text: '#1565c0' },
+  MZ1: { bg: '#e8f5e9', text: '#1b5e20' },
+};
 
 const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], ambiente: [], data_inicio: '', data_fim: '', status: '' };
 
@@ -323,16 +327,19 @@ const InsightCard: React.FC<{
         <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
         {entries.length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
-            {entries.map(([amb, val]) => (
-              <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
-                <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                  {amb}
-                </Typography>
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3 }}>
-                  {typeof val === 'number' ? val.toLocaleString('pt-BR') : val}
-                </Typography>
-              </Box>
-            ))}
+            {entries.map(([amb, val]) => {
+              const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+              return (
+                <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+                  <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                    {amb}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
+                    {typeof val === 'number' ? val.toLocaleString('pt-BR') : val}
+                  </Typography>
+                </Box>
+              );
+            })}
           </Box>
         )}
       </CardContent>
@@ -544,22 +551,25 @@ export const Tela2Execucoes: React.FC = () => {
             />
             {resumo?.por_ambiente && Object.keys(resumo.por_ambiente).length > 0 && (
               <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
-                {Object.entries(resumo.por_ambiente).sort(([a], [b]) => a.localeCompare(b)).map(([amb, v]) => (
-                  <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
-                    <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                      {amb}
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, alignItems: 'baseline' }}>
-                      <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'success.dark', lineHeight: 1.3 }}>
-                        {v.ok.toLocaleString('pt-BR')}
+                {Object.entries(resumo.por_ambiente).sort(([a], [b]) => a.localeCompare(b)).map(([amb, v]) => {
+                  const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+                  return (
+                    <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+                      <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                        {amb}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', lineHeight: 1.3 }}>/</Typography>
-                      <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'error.dark', lineHeight: 1.3 }}>
-                        {v.nok.toLocaleString('pt-BR')}
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, alignItems: 'baseline' }}>
+                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'success.dark', lineHeight: 1.3 }}>
+                          {v.ok.toLocaleString('pt-BR')}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', lineHeight: 1.3 }}>/</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'error.dark', lineHeight: 1.3 }}>
+                          {v.nok.toLocaleString('pt-BR')}
+                        </Typography>
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
+                  );
+                })}
               </Box>
             )}
           </CardContent>
