@@ -413,9 +413,8 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
           label="Tabelas com ISD" value={resumo?.tabelas_isd ?? 0} color="#e65100"
           porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_isd')} />
         <ResumoCard icon={<NotificationsActiveIcon fontSize="small" />}
-          label="Tabelas com Alertas" value={resumo?.tabelas_alerta ?? 0} color="#c62828"
-          subLabel="JOBs com alerta" subValue={resumo?.jobs_alerta ?? 0}
-          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_alerta')} />
+          label="JOBs com Alerta" value={resumo?.jobs_alerta ?? 0} color="#c62828"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'jobs_alerta')} />
         <ResumoCard icon={<PowerOffIcon fontSize="small" />}
           label="Jobs Inativos (CTM×LOG)" value={semExec?.total ?? 0} color="#78909c" />
       </Box>
