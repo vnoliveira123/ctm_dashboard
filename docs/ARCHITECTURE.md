@@ -1,7 +1,7 @@
 ﻿# Arquitetura - Log Dashboard
 
 ## Overview
-Sistema de análise de processos Control-M com volumetria massiva (50M+ logs).
+Sistema de análise de processos Control-M com volumetria massiva (50M+ logs)
 
 ## Stack
 - **Backend:** FastAPI + Python + PostgreSQL + Redis
