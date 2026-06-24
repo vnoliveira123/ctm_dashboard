@@ -181,11 +181,40 @@ const GraficoComparativo: React.FC<{
   );
 };
 
+// ── Split AL1/MZ1 reutilizável ────────────────────────────────────────────────
+const AmbSplit: React.FC<{ por: Record<string, number> }> = ({ por }) => {
+  const entries = Object.entries(por).sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return null;
+  return (
+    <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+      {entries.map(([amb, val]) => (
+        <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
+          <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+            {amb}
+          </Typography>
+          <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3 }}>
+            {val.toLocaleString('pt-BR')}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+function ambPick(
+  por: Record<string, Record<string, number>> | undefined,
+  field: string,
+): Record<string, number> | undefined {
+  if (!por || !Object.keys(por).length) return undefined;
+  return Object.fromEntries(Object.entries(por).map(([k, v]) => [k, v[field] ?? 0]));
+}
+
 // ── Cards de resumo ───────────────────────────────────────────────────────────
 const ResumoCard: React.FC<{
   icon: React.ReactNode; label: string; value: number; color: string;
   subLabel?: string; subValue?: number;
-}> = ({ icon, label, value, color, subLabel, subValue }) => (
+  porAmbiente?: Record<string, number>;
+}> = ({ icon, label, value, color, subLabel, subValue, porAmbiente }) => (
   <Card sx={{ flex: '1 1 160px', minWidth: 140, borderTop: `3px solid ${color}` }}>
     <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, color }}>
@@ -202,6 +231,7 @@ const ResumoCard: React.FC<{
           </Box>
         </>
       )}
+      {porAmbiente && <AmbSplit por={porAmbiente} />}
     </CardContent>
   </Card>
 );
@@ -364,16 +394,21 @@ const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
       {/* ── Cards de Resumo ── */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <ResumoCard icon={<WorkIcon fontSize="small" />}
-          label="Total de JOBs" value={resumo?.total_jobs ?? 0} color="#1976d2" />
+          label="Total de JOBs" value={resumo?.total_jobs ?? 0} color="#1976d2"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'total_jobs')} />
         <ResumoCard icon={<TableChartIcon fontSize="small" />}
-          label="Tabelas" value={resumo?.total_tabelas ?? 0} color="#7b1fa2" />
+          label="Tabelas" value={resumo?.total_tabelas ?? 0} color="#7b1fa2"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'total_tabelas')} />
         <ResumoCard icon={<AutorenewIcon fontSize="small" />}
-          label="Tabelas em Carga" value={resumo?.tabelas_carga ?? 0} color="#2e7d32" />
+          label="Tabelas em Carga" value={resumo?.tabelas_carga ?? 0} color="#2e7d32"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_carga')} />
         <ResumoCard icon={<AccountTreeIcon fontSize="small" />}
-          label="Tabelas com ISD" value={resumo?.tabelas_isd ?? 0} color="#e65100" />
+          label="Tabelas com ISD" value={resumo?.tabelas_isd ?? 0} color="#e65100"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_isd')} />
         <ResumoCard icon={<NotificationsActiveIcon fontSize="small" />}
           label="Tabelas com Alertas" value={resumo?.tabelas_alerta ?? 0} color="#c62828"
-          subLabel="JOBs com alerta" subValue={resumo?.jobs_alerta ?? 0} />
+          subLabel="JOBs com alerta" subValue={resumo?.jobs_alerta ?? 0}
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_alerta')} />
         <ResumoCard icon={<PowerOffIcon fontSize="small" />}
           label="Jobs Inativos (CTM×LOG)" value={semExec?.total ?? 0} color="#78909c" />
       </Box>

@@ -23,6 +23,13 @@ export interface ExecucaoItem {
   duracao_minutos: number | null;
 }
 
+export interface ResumoAmbienteExecucao {
+  total: number;
+  ok: number;
+  nok: number;
+  duracao_media: number;
+}
+
 export interface ResumoExecucoes {
   total: number;
   ok: number;
@@ -30,6 +37,7 @@ export interface ResumoExecucoes {
   duracao_media: number;
   job_maior_duracao: string;
   maior_duracao: number;
+  por_ambiente?: Record<string, ResumoAmbienteExecucao>;
 }
 
 export interface VolumeData     { data: string; total: number; ok: number; nok: number; }

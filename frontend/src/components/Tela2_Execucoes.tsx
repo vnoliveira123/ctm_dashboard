@@ -308,17 +308,37 @@ const Legend: React.FC<{ items: { color: string; label: string }[]; x: number; y
   </g>
 );
 
-const InsightCard: React.FC<{ icon: React.ReactNode; label: string; value: React.ReactNode; color: string }> = ({ icon, label, value, color }) => (
-  <Card sx={{ flex: '1 1 150px', minWidth: 140, borderTop: `3px solid ${color}` }}>
-    <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, color }}>
-        {icon}
-        <Typography variant="caption" color="text.secondary" fontWeight={500}>{label}</Typography>
-      </Box>
-      <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
-    </CardContent>
-  </Card>
-);
+const InsightCard: React.FC<{
+  icon: React.ReactNode; label: string; value: React.ReactNode; color: string;
+  porAmbiente?: Record<string, string | number>;
+}> = ({ icon, label, value, color, porAmbiente }) => {
+  const entries = porAmbiente ? Object.entries(porAmbiente).sort(([a], [b]) => a.localeCompare(b)) : [];
+  return (
+    <Card sx={{ flex: '1 1 150px', minWidth: 140, borderTop: `3px solid ${color}` }}>
+      <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, color }}>
+          {icon}
+          <Typography variant="caption" color="text.secondary" fontWeight={500}>{label}</Typography>
+        </Box>
+        <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
+        {entries.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+            {entries.map(([amb, val]) => (
+              <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
+                <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                  {amb}
+                </Typography>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.3 }}>
+                  {typeof val === 'number' ? val.toLocaleString('pt-BR') : val}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 const ChartCard: React.FC<{ title: string; children: React.ReactNode; legend?: { color: string; label: string }[] }> = ({ title, children, legend }) => (
   <Paper variant="outlined" sx={{ p: 2 }}>
@@ -488,7 +508,10 @@ export const Tela2Execucoes: React.FC = () => {
       {/* Insight Cards */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <InsightCard icon={<TimerIcon fontSize="small" />} label="Execuções"
-          value={resumo?.total?.toLocaleString('pt-BR') ?? 0} color="#1976d2" />
+          value={resumo?.total?.toLocaleString('pt-BR') ?? 0} color="#1976d2"
+          porAmbiente={resumo?.por_ambiente
+            ? Object.fromEntries(Object.entries(resumo.por_ambiente).map(([k, v]) => [k, v.total]))
+            : undefined} />
         <Card sx={{ flex: '1 1 190px', minWidth: 170, borderTop: '3px solid #1976d2' }}>
           <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -519,10 +542,33 @@ export const Tela2Execucoes: React.FC = () => {
               value={resumo ? Math.round(resumo.ok / (resumo.total || 1) * 100) : 0}
               sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: '#ffcdd2', '& .MuiLinearProgress-bar': { bgcolor: '#2e7d32' } }}
             />
+            {resumo?.por_ambiente && Object.keys(resumo.por_ambiente).length > 0 && (
+              <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+                {Object.entries(resumo.por_ambiente).sort(([a], [b]) => a.localeCompare(b)).map(([amb, v]) => (
+                  <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1, py: 0.3 }}>
+                    <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: 'text.secondary', lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                      {amb}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, alignItems: 'baseline' }}>
+                      <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'success.dark', lineHeight: 1.3 }}>
+                        {v.ok.toLocaleString('pt-BR')}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', lineHeight: 1.3 }}>/</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'error.dark', lineHeight: 1.3 }}>
+                        {v.nok.toLocaleString('pt-BR')}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
           </CardContent>
         </Card>
         <InsightCard icon={<SpeedIcon fontSize="small" />} label="Duração Média"
-          value={resumo ? `${resumo.duracao_media.toFixed(1)} min` : '-'} color="#e65100" />
+          value={resumo ? `${resumo.duracao_media.toFixed(1)} min` : '-'} color="#e65100"
+          porAmbiente={resumo?.por_ambiente
+            ? Object.fromEntries(Object.entries(resumo.por_ambiente).map(([k, v]) => [k, `${v.duracao_media.toFixed(1)} min`]))
+            : undefined} />
         <InsightCard icon={<EmojiEventsIcon fontSize="small" />} label="Maior Duração"
           value={
             resumo?.job_maior_duracao && resumo.job_maior_duracao !== '-'

@@ -115,6 +115,28 @@ def get_processos(db: Session, skip=0, limit=20,
         'jobs_alerta':   base.filter(Processo.tem_alerta == True).count(),
     }
 
+    # Breakdown por ambiente — uma query GROUP BY extra
+    _amb = base.with_entities(
+        Processo.ambiente,
+        func.count(Processo.id).label('jobs'),
+        func.count(func.distinct(Processo.tabela)).label('tabelas'),
+        func.count(func.distinct(case((Processo.carga == 'SIM', Processo.tabela)))).label('t_carga'),
+        func.count(func.distinct(case((Processo.isd   == 'SIM', Processo.tabela)))).label('t_isd'),
+        func.count(func.distinct(case((Processo.tem_alerta == True, Processo.tabela)))).label('t_alerta'),
+        func.count(case((Processo.tem_alerta == True, Processo.id))).label('j_alerta'),
+    ).group_by(Processo.ambiente).all()
+    resumo['por_ambiente'] = {
+        r.ambiente: {
+            'total_jobs':    int(r.jobs),
+            'total_tabelas': int(r.tabelas),
+            'tabelas_carga': int(r.t_carga),
+            'tabelas_isd':   int(r.t_isd),
+            'tabelas_alerta':int(r.t_alerta),
+            'jobs_alerta':   int(r.j_alerta),
+        }
+        for r in _amb if r.ambiente
+    }
+
     processos = base.order_by(Processo.tabela, Processo.job).offset(skip).limit(limit).all()
     return {'processos': processos, 'total': total, 'resumo': resumo}
 
@@ -362,6 +384,27 @@ def _graficos_via_cagg(
         .all()
     )
 
+    # Breakdown por ambiente
+    _amb_res = db.execute(text(f"""
+        SELECT ambiente,
+               SUM(total)                                    AS total,
+               SUM(ok)                                       AS ok,
+               SUM(nok)                                      AS nok,
+               SUM(avg_dur * total) / NULLIF(SUM(total), 0) AS avg_dur
+        FROM cagg_execucoes_dia
+        WHERE {where}
+        GROUP BY ambiente
+    """), params).fetchall()
+    _por_amb = {
+        r.ambiente: {
+            'total':         int(r.total or 0),
+            'ok':            int(r.ok    or 0),
+            'nok':           int(r.nok   or 0),
+            'duracao_media': round(float(r.avg_dur or 0), 2),
+        }
+        for r in _amb_res if r.ambiente
+    }
+
     return {
         'resumo': {
             'total':              total_count,
@@ -370,6 +413,7 @@ def _graficos_via_cagg(
             'duracao_media':      round(avg_dur, 2),
             'job_maior_duracao':  top_job.job      if top_job else '-',
             'maior_duracao':      round(float(top_job.max_dur), 2) if top_job and top_job.max_dur else 0,
+            'por_ambiente':       _por_amb,
         },
         'volume_por_data': [
             {'data': str(r.dt), 'total': _vol_total(r), 'ok': int(r.ok or 0), 'nok': int(r.nok or 0)}

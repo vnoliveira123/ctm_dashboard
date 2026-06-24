@@ -43,6 +43,15 @@ export interface ProcessoItem {
   untiltime?: string;
 }
 
+export interface ResumoAmbienteProcesso {
+  total_jobs:    number;
+  total_tabelas: number;
+  tabelas_carga: number;
+  tabelas_isd:   number;
+  tabelas_alerta: number;
+  jobs_alerta:   number;
+}
+
 export interface ResumoProcessos {
   total_jobs:    number;
   total_tabelas: number;
@@ -50,6 +59,7 @@ export interface ResumoProcessos {
   tabelas_isd:   number;
   tabelas_alerta: number;
   jobs_alerta:   number;
+  por_ambiente?: Record<string, ResumoAmbienteProcesso>;
 }
 
 export interface GraficosProcessos {
