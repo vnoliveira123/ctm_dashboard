@@ -4,7 +4,7 @@ import {
   Box, Paper, Typography, TextField, Button, Chip, CircularProgress, Alert,
   Pagination, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   FormControl, InputLabel, Select, MenuItem, Divider, Collapse, Card, CardContent, Grid,
-  Autocomplete, Checkbox,
+  Autocomplete, Checkbox, LinearProgress, Tabs, Tab,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -15,23 +15,25 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
   useExecucoes, useGraficosExecucoes, useRotinasDisponiveis, useSlaJobs,
-  useDesvioVolumetria, useTendenciaDuracao,
+  useDesvioVolumetria, useTendenciaDuracao, useMultiplasPorDia,
   FiltrosExecucao, VolumeData, TopDurData, HoraData, IsdData, TimeseriesItem, SlaItem,
-  DesvioVolumetriaItem, TendenciaDuracaoItem,
+  DesvioVolumetriaItem, TendenciaDuracaoItem, MultiplasItem,
 } from '../hooks/useExecucoes';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import BarChartIcon   from '@mui/icons-material/BarChart';
 
-const GRUPOS = ['PR12', 'PR21', 'PR31', 'PR41'];
+const GRUPOS    = ['PR12', 'PR21', 'PR31', 'PR41'];
+const AMBIENTES = ['AL1', 'MZ1'];
+const AMB_COLORS: Record<string, { bg: string; text: string }> = {
+  AL1: { bg: '#e3f2fd', text: '#1565c0' },
+  MZ1: { bg: '#e8f5e9', text: '#1b5e20' },
+};
+
+const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], ambiente: [], data_inicio: '', data_fim: '', status: '' };
 
 function getFiltrosIniciais(): FiltrosExecucao {
-  const hoje = new Date();
-  const fim = hoje.toISOString().split('T')[0];
-  const d = new Date(hoje);
-  d.setDate(d.getDate() - 30);
-  return { tabela: [], job: [], grupo: [], rotina: [], data_inicio: d.toISOString().split('T')[0], data_fim: fim, status: '' };
+  return { ...FILTROS_VAZIOS };
 }
-const FILTROS_VAZIOS: FiltrosExecucao = { tabela: [], job: [], grupo: [], rotina: [], data_inicio: '', data_fim: '', status: '' };
 
 // ── Helpers D3 ───────────────────────────────────────────────────────────────
 
@@ -99,83 +101,45 @@ const GraficoVolumeDiario: React.FC<{ data: VolumeData[] }> = ({ data }) => {
   );
 };
 
-// ── Chart 2: Duração por job (barras horizontais, scroll) ────────────────────
-const GraficoTopDuracao: React.FC<{ data: TopDurData[] }> = ({ data }) => {
-  if (!data.length) return <SemDados />;
-  const barH = 20, gap = 4;
-  const IH = data.length * (barH + gap);
-  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.avg_dur) || 1]).range([0, IW]).nice();
-  const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.15);
-  return (
-    <Box sx={{ aspectRatio: '560 / 222', overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${W} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
-           style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
-        <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-          {x.ticks(5).map(t => (
-            <g key={t}>
-              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-              <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t.toFixed(0)}</text>
-            </g>
-          ))}
-          {data.map(d => (
-            <g key={d.job}>
-              <rect x={0} y={y(d.job)!} width={x(d.avg_dur)} height={y.bandwidth()} fill="#7b1fa2" rx={2} />
-              <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                    textAnchor="end" fontSize={10} fill="#555">
-                {d.job.slice(-10)}
-              </text>
-              <text x={x(d.avg_dur) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                    fontSize={9} fill="#666">{d.avg_dur.toFixed(1)} min</text>
-            </g>
-          ))}
-          <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Duração média (min)</text>
-        </g>
-      </svg>
-    </Box>
-  );
-};
 
-// ── Chart 3: Pizza OK vs NOT OK ───────────────────────────────────────────────
-const GraficoPizza: React.FC<{ ok: number; nok: number }> = ({ ok, nok }) => {
-  const total = ok + nok;
-  if (!total) return <SemDados />;
-  const R = 80, RI = 48, CX = 230, CY = 100, VW = 560, VH = 222;
-  const pieData = d3.pie<{ label: string; value: number; color: string }>().value(d => d.value)([
-    { label: 'OK',     value: ok,  color: '#4caf50' },
-    { label: 'NOT OK', value: nok, color: '#f44336' },
-  ]);
-  const arc    = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(RI).outerRadius(R);
-  const arcLbl = d3.arc<d3.PieArcDatum<{ label: string; value: number; color: string }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
+// ── Múltiplas execuções por dia ───────────────────────────────────────────────
+const GraficoMultiplas: React.FC<{ rows: MultiplasItem[] }> = ({ rows }) => {
+  if (!rows.length) return (
+    <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+      Nenhuma tabela com múltiplas execuções por dia no período.
+    </Typography>
+  );
+  const maxVal = Math.max(...rows.map(r => r.max_execucoes_dia), 1);
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} width="100%">
-      <g transform={`translate(${CX},${CY})`}>
-        {pieData.map((s, i) => (
-          <g key={i}>
-            <path d={arc(s) || ''} fill={s.data.color} />
-            {s.data.value / total > 0.05 && (
-              <text transform={`translate(${arcLbl.centroid(s)})`} textAnchor="middle"
-                    dy="0.35em" fontSize={12} fill="white" fontWeight="bold">
-                {Math.round(s.data.value / total * 100)}%
-              </text>
-            )}
-          </g>
-        ))}
-        <text textAnchor="middle" dy="-0.3em" fontSize={16} fontWeight="bold" fill="#333">
-          {total.toLocaleString('pt-BR')}
-        </text>
-        <text textAnchor="middle" dy="1.1em" fontSize={10} fill="#999">execuções</text>
-      </g>
-      {/* Legenda lateral */}
-      <g transform={`translate(${CX + R + 24}, ${CY - 30})`}>
-        {[{ color: '#4caf50', label: 'OK', value: ok }, { color: '#f44336', label: 'NOT OK', value: nok }].map((it, i) => (
-          <g key={it.label} transform={`translate(0,${i * 36})`}>
-            <rect width={14} height={14} rx={3} fill={it.color} />
-            <text x={20} y={11} fontSize={12} fill="#555" fontWeight="bold">{it.label}</text>
-            <text x={20} y={26} fontSize={11} fill="#888">{it.value.toLocaleString('pt-BR')}</text>
-          </g>
-        ))}
-      </g>
-    </svg>
+    <Box sx={{ maxHeight: 230, overflowY: 'auto' }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Tabela</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Grupo</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Máx/dia</TableCell>
+            <TableCell sx={{ width: 100 }} />
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Dias</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Total</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tabela}</TableCell>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{r.grupo?.split('-')[0] || '-'}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{r.max_execucoes_dia}×</TableCell>
+              <TableCell sx={{ width: 100 }}>
+                <LinearProgress variant="determinate" value={(r.max_execucoes_dia / maxVal) * 100}
+                  color="warning" sx={{ height: 8, borderRadius: 4 }} />
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{r.dias_com_multiplas}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{r.total_execucoes.toLocaleString('pt-BR')}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
   );
 };
 
@@ -223,52 +187,11 @@ const GraficoHorario: React.FC<{ data: HoraData[] }> = ({ data }) => {
         })}
         <line y1={IH} y2={IH} x1={0} x2={IW} stroke="#ccc" />
         <text x={IW / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Hora do dia</text>
-        <Legend items={[
-          { color: '#4caf50', label: 'OK' },
-          { color: '#f44336', label: 'NOT OK' },
-          { color: '#ff9800', label: 'Pior hora' },
-        ]} x={IW - 90} y={-8} />
       </g>
     </svg>
   );
 };
 
-// ── Chart 5: Execuções ISD (scroll) ──────────────────────────────────────────
-// viewBox mais largo que os outros gráficos para compensar a largura total do grid
-const W_ISD  = 1100;
-const IW_ISD = W_ISD - MARGIN.left - MARGIN.right;
-
-const GraficoISD: React.FC<{ data: IsdData[] }> = ({ data }) => {
-  if (!data.length) return <SemDados msg="Nenhum job com ISD ativo no período selecionado." />;
-  const barH = 16, IH = data.length * (barH + 4);
-  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total) || 1]).range([0, IW_ISD]).nice();
-  const y = d3.scaleBand().domain(data.map(d => d.job)).range([0, IH]).padding(0.2);
-  return (
-    <Box sx={{ maxHeight: 260, overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${W_ISD} ${IH + MARGIN.top + MARGIN.bottom}`} width="100%"
-           style={{ minHeight: IH + MARGIN.top + MARGIN.bottom }}>
-        <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
-          {x.ticks(5).map(t => (
-            <g key={t}>
-              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-              <text x={x(t)} y={IH + 16} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
-            </g>
-          ))}
-          {data.map(d => (
-            <g key={d.job}>
-              <rect x={0} y={y(d.job)!} width={x(d.total)} height={y.bandwidth()} fill="#e65100" rx={2} />
-              <text x={-4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                    textAnchor="end" fontSize={10} fill="#555">{d.job.slice(-10)}</text>
-              <text x={x(d.total) + 4} y={(y(d.job) || 0) + y.bandwidth() / 2} dy="0.35em"
-                    fontSize={9} fill="#666">{d.total}</text>
-            </g>
-          ))}
-          <text x={IW_ISD / 2} y={IH + 36} textAnchor="middle" fontSize={10} fill="#999">Nº de execuções</text>
-        </g>
-      </svg>
-    </Box>
-  );
-};
 
 // ── Chart 6: Série temporal do JOB filtrado ───────────────────────────────────
 // vw permite usar viewBox mais largo para gráficos em linha inteira (xs=12),
@@ -309,6 +232,70 @@ const GraficoSerie: React.FC<{ data: TimeseriesItem[]; job?: string; ih?: number
   );
 };
 
+// ── Ranking tabela: Duração Média por Job ─────────────────────────────────────
+const RankingDuracao: React.FC<{ rows: TopDurData[] }> = ({ rows }) => {
+  if (!rows.length) return <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>Sem dados para o período selecionado.</Typography>;
+  const maxVal = Math.max(...rows.map(r => r.avg_dur), 1);
+  return (
+    <Box sx={{ maxHeight: 230, overflowY: 'auto' }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Job</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Média (min)</TableCell>
+            <TableCell sx={{ width: 110 }} />
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Máx</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.job}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{r.avg_dur.toFixed(1)}</TableCell>
+              <TableCell sx={{ width: 110 }}>
+                <LinearProgress variant="determinate" value={(r.avg_dur / maxVal) * 100}
+                  color="secondary" sx={{ height: 8, borderRadius: 4 }} />
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>{r.max_dur.toFixed(1)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+};
+
+// ── Ranking tabela: Volume ISD por Job ────────────────────────────────────────
+const RankingISD: React.FC<{ rows: IsdData[] }> = ({ rows }) => {
+  if (!rows.length) return <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>Nenhum job com ISD ativo no período selecionado.</Typography>;
+  const maxVal = Math.max(...rows.map(r => r.total), 1);
+  return (
+    <Box sx={{ maxHeight: 230, overflowY: 'auto' }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>Job</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Execuções</TableCell>
+            <TableCell sx={{ width: 120 }} />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.job}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{r.total.toLocaleString('pt-BR')}</TableCell>
+              <TableCell sx={{ width: 120 }}>
+                <LinearProgress variant="determinate" value={(r.total / maxVal) * 100}
+                  sx={{ height: 8, borderRadius: 4, bgcolor: '#fff3e0', '& .MuiLinearProgress-bar': { bgcolor: '#e65100' } }} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+};
+
 // ── Helpers visuais ───────────────────────────────────────────────────────────
 const SemDados: React.FC<{ msg?: string }> = ({ msg = 'Sem dados para o período selecionado.' }) => (
   <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>{msg}</Typography>
@@ -325,21 +312,56 @@ const Legend: React.FC<{ items: { color: string; label: string }[]; x: number; y
   </g>
 );
 
-const InsightCard: React.FC<{ icon: React.ReactNode; label: string; value: React.ReactNode; color: string }> = ({ icon, label, value, color }) => (
-  <Card sx={{ flex: '1 1 150px', minWidth: 140, borderTop: `3px solid ${color}` }}>
-    <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, color }}>
-        {icon}
-        <Typography variant="caption" color="text.secondary" fontWeight={500}>{label}</Typography>
-      </Box>
-      <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
-    </CardContent>
-  </Card>
-);
+const InsightCard: React.FC<{
+  icon: React.ReactNode; label: string; value: React.ReactNode; color: string;
+  porAmbiente?: Record<string, string | number>;
+}> = ({ icon, label, value, color, porAmbiente }) => {
+  const entries = porAmbiente ? Object.entries(porAmbiente).sort(([a], [b]) => a.localeCompare(b)) : [];
+  return (
+    <Card sx={{ flex: '1 1 150px', minWidth: 140, borderTop: `3px solid ${color}` }}>
+      <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, color }}>
+          {icon}
+          <Typography variant="caption" color="text.secondary" fontWeight={500}>{label}</Typography>
+        </Box>
+        <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.3rem' }}>{value}</Typography>
+        {entries.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+            {entries.map(([amb, val]) => {
+              const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+              return (
+                <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+                  <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                    {amb}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
+                    {typeof val === 'number' ? val.toLocaleString('pt-BR') : val}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
-const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const ChartCard: React.FC<{ title: string; children: React.ReactNode; legend?: { color: string; label: string }[] }> = ({ title, children, legend }) => (
   <Paper variant="outlined" sx={{ p: 2 }}>
-    <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>{title}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+      <Typography variant="subtitle2" fontWeight={600}>{title}</Typography>
+      {legend && (
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          {legend.map(it => (
+            <Box key={it.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: it.color, flexShrink: 0 }} />
+              <Typography variant="caption" color="text.secondary">{it.label}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
     {children}
   </Paper>
 );
@@ -359,17 +381,19 @@ export const Tela2Execucoes: React.FC = () => {
   const [desvioThreshold, setDesvioThreshold]   = useState(50);
   const [desvioInput, setDesvioInput]           = useState('50');
   const [exibirTendencia, setExibirTendencia]   = useState(false);
+  const [rankingTab, setRankingTab]             = useState(0);
 
   const { data, isLoading, error }   = useExecucoes(filtrosAtivos, page);
   const { data: graficos }           = useGraficosExecucoes(filtrosAtivos);
   const { data: rotinasData }        = useRotinasDisponiveis();
-  const { data: slaData }            = useSlaJobs(slaMin);
-  const { data: desvioData }         = useDesvioVolumetria(desvioThreshold);
-  const { data: tendenciaData }      = useTendenciaDuracao();
+  const { data: slaData }            = useSlaJobs(slaMin, filtrosAtivos);
+  const { data: desvioData }         = useDesvioVolumetria(desvioThreshold, filtrosAtivos);
+  const { data: tendenciaData }      = useTendenciaDuracao(filtrosAtivos);
+  const { data: multiplasData }      = useMultiplasPorDia(filtrosAtivos);
 
   const setStr = (campo: 'data_inicio' | 'data_fim' | 'status') => (v: string) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
-  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
+  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina' | 'ambiente') => (v: string[]) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
 
   const aplicar = () => {
@@ -451,6 +475,18 @@ export const Tela2Execucoes: React.FC = () => {
                 }
                 renderInput={(params) => <TextField {...params} label="Rotina" size="small" sx={{ minWidth: 160 }} />}
               />
+              <Autocomplete
+                multiple disableCloseOnSelect options={AMBIENTES}
+                value={filtros.ambiente ?? []}
+                onChange={(_, v) => setArr('ambiente')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" color="info" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Ambiente" size="small" sx={{ minWidth: 140 }} />}
+              />
               <TextField label="Data Início" type="date" value={filtros.data_inicio} size="small"
                          InputLabelProps={{ shrink: true }} onChange={e => setStr('data_inicio')(e.target.value)} />
               <TextField label="Data Fim" type="date" value={filtros.data_fim} size="small"
@@ -479,13 +515,70 @@ export const Tela2Execucoes: React.FC = () => {
       {/* Insight Cards */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <InsightCard icon={<TimerIcon fontSize="small" />} label="Execuções"
-          value={resumo?.total?.toLocaleString('pt-BR') ?? 0} color="#1976d2" />
-        <InsightCard icon={<CheckCircleIcon fontSize="small" />} label="OK"
-          value={resumo?.ok?.toLocaleString('pt-BR') ?? 0} color="#2e7d32" />
-        <InsightCard icon={<CancelIcon fontSize="small" />} label="NOT OK"
-          value={resumo?.nok?.toLocaleString('pt-BR') ?? 0} color="#c62828" />
+          value={resumo?.total?.toLocaleString('pt-BR') ?? 0} color="#1976d2"
+          porAmbiente={resumo?.por_ambiente
+            ? Object.fromEntries(Object.entries(resumo.por_ambiente).map(([k, v]) => [k, v.total]))
+            : undefined} />
+        <Card sx={{ flex: '1 1 190px', minWidth: 170, borderTop: '3px solid #1976d2' }}>
+          <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+              <CheckCircleIcon fontSize="small" sx={{ color: '#2e7d32' }} />
+              <CancelIcon fontSize="small" sx={{ color: '#c62828' }} />
+              <Typography variant="caption" color="text.secondary" fontWeight={500}>OK / NOT OK</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box>
+                <Typography variant="h6" fontWeight="bold" color="success.dark" sx={{ lineHeight: 1.2 }}>
+                  {resumo?.ok?.toLocaleString('pt-BR') ?? 0}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resumo ? Math.round(resumo.ok / (resumo.total || 1) * 100) : 0}% OK
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="h6" fontWeight="bold" color="error.dark" sx={{ lineHeight: 1.2 }}>
+                  {resumo?.nok?.toLocaleString('pt-BR') ?? 0}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resumo ? Math.round(resumo.nok / (resumo.total || 1) * 100) : 0}% NOT OK
+                </Typography>
+              </Box>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={resumo ? Math.round(resumo.ok / (resumo.total || 1) * 100) : 0}
+              sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: '#ffcdd2', '& .MuiLinearProgress-bar': { bgcolor: '#2e7d32' } }}
+            />
+            {resumo?.por_ambiente && Object.keys(resumo.por_ambiente).length > 0 && (
+              <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+                {Object.entries(resumo.por_ambiente).sort(([a], [b]) => a.localeCompare(b)).map(([amb, v]) => {
+                  const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+                  return (
+                    <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+                      <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                        {amb}
+                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5, alignItems: 'baseline' }}>
+                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'success.dark', lineHeight: 1.3 }}>
+                          {v.ok.toLocaleString('pt-BR')}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled', lineHeight: 1.3 }}>/</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'error.dark', lineHeight: 1.3 }}>
+                          {v.nok.toLocaleString('pt-BR')}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          </CardContent>
+        </Card>
         <InsightCard icon={<SpeedIcon fontSize="small" />} label="Duração Média"
-          value={resumo ? `${resumo.duracao_media.toFixed(1)} min` : '-'} color="#e65100" />
+          value={resumo ? `${resumo.duracao_media.toFixed(1)} min` : '-'} color="#e65100"
+          porAmbiente={resumo?.por_ambiente
+            ? Object.fromEntries(Object.entries(resumo.por_ambiente).map(([k, v]) => [k, `${v.duracao_media.toFixed(1)} min`]))
+            : undefined} />
         <InsightCard icon={<EmojiEventsIcon fontSize="small" />} label="Maior Duração"
           value={
             resumo?.job_maior_duracao && resumo.job_maior_duracao !== '-'
@@ -510,26 +603,32 @@ export const Tela2Execucoes: React.FC = () => {
           </ChartCard>
         </Grid>
         <Grid item xs={12} md={6}>
-          <ChartCard title="Execuções por Hora do Dia">
+          <ChartCard title="Execuções por Hora do Dia" legend={[
+            { color: '#4caf50', label: 'OK' },
+            { color: '#f44336', label: 'NOT OK' },
+            { color: '#ff9800', label: 'Horário de pico' },
+          ]}>
             <GraficoHorario data={graficos?.por_hora ?? []} />
           </ChartCard>
         </Grid>
-        {/* Linha 2: Pizza | Duração por job */}
+        {/* Linha 2: Múltiplas execuções | Ranking de Jobs (tabs) */}
         <Grid item xs={12} md={6}>
-          <ChartCard title="Status: OK vs NOT OK">
-            <GraficoPizza ok={resumo?.ok ?? 0} nok={resumo?.nok ?? 0} />
-          </ChartCard>
+          <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Tabelas com Múltiplas Execuções por Dia</Typography>
+            <GraficoMultiplas rows={multiplasData?.tabelas ?? []} />
+          </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <ChartCard title="Jobs por Duração Média (min)">
-            <GraficoTopDuracao data={graficos?.top_duracao ?? []} />
-          </ChartCard>
-        </Grid>
-        {/* Linha 3: ISD largura total */}
-        <Grid item xs={12}>
-          <ChartCard title="Jobs com ISD — Volume de Execuções">
-            <GraficoISD data={graficos?.isd_execucoes ?? []} />
-          </ChartCard>
+          <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Ranking de Jobs</Typography>
+            <Tabs value={rankingTab} onChange={(_, v) => setRankingTab(v)} variant="fullWidth"
+                  sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, fontSize: '0.75rem', py: 0.5 } }}>
+              <Tab label="Duração Média (min)" />
+              <Tab label="Volume ISD" />
+            </Tabs>
+            {rankingTab === 0 && <RankingDuracao rows={graficos?.top_duracao ?? []} />}
+            {rankingTab === 1 && <RankingISD rows={graficos?.isd_execucoes ?? []} />}
+          </Paper>
         </Grid>
       </Grid>
 
@@ -570,7 +669,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'warning.light' }}>
-                    {['Tabela', 'Job', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
+                    {['Tabela', 'Job', 'Grupo', 'Duração Média (min)', 'Duração Máx (min)', 'Execuções'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -580,6 +679,9 @@ export const Tela2Execucoes: React.FC = () => {
                     <TableRow key={i} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.job}</TableCell>
+                      <TableCell>
+                        <Chip label={j.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell>
                         <Chip label={`${j.avg_dur.toFixed(1)} min`} size="small" color="warning" />
                       </TableCell>
@@ -630,7 +732,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'warning.light' }}>
-                    {['Tabela', 'Job', 'Dia', 'Observado', 'Baseline (média)', 'Desvio (%)'].map(c => (
+                    {['Tabela', 'Job', 'Grupo', 'Dia', 'Observado', 'Baseline (média)', 'Desvio (%)'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -640,6 +742,9 @@ export const Tela2Execucoes: React.FC = () => {
                     <TableRow key={i} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
+                      <TableCell>
+                        <Chip label={a.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{a.dia}</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{a.observado}</TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{a.baseline.toFixed(1)}</TableCell>
@@ -685,7 +790,7 @@ export const Tela2Execucoes: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'error.light' }}>
-                    {['Tabela', 'Job', 'Última Semana (min)', 'Histórico (min)', 'Variação', 'Semanas'].map(c => (
+                    {['Tabela', 'Job', 'Grupo', 'Última Semana (min)', 'Histórico (min)', 'Variação', 'Semanas'].map(c => (
                       <TableCell key={c} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
@@ -695,6 +800,9 @@ export const Tela2Execucoes: React.FC = () => {
                     <TableRow key={i} hover>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.tabela}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{a.job}</TableCell>
+                      <TableCell>
+                        <Chip label={a.grupo?.split('-')[0] || '-'} size="small" variant="outlined" color="primary" />
+                      </TableCell>
                       <TableCell>
                         <Chip label={`${a.dur_ultima.toFixed(1)} min`} size="small" color="error" />
                       </TableCell>
