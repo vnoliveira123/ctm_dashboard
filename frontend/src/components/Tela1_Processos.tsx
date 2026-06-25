@@ -4,7 +4,7 @@ import {
   Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, TextField, Button, CircularProgress, Alert, Pagination, Card,
   CardContent, Typography, Chip, FormControl, InputLabel, Select, MenuItem,
-  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid, Autocomplete,
+  OutlinedInput, Checkbox, ListItemText, Divider, Collapse, Grid, Autocomplete, LinearProgress,
 } from '@mui/material';
 import FilterListIcon          from '@mui/icons-material/FilterList';
 import ClearIcon               from '@mui/icons-material/Clear';
@@ -23,6 +23,11 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const GRUPOS      = ['PR12', 'PR21', 'PR31', 'PR41'];
+const AMBIENTES   = ['AL1', 'MZ1'];
+const AMB_COLORS: Record<string, { bg: string; text: string }> = {
+  AL1: { bg: '#e3f2fd', text: '#1565c0' },
+  MZ1: { bg: '#e8f5e9', text: '#1b5e20' },
+};
 const HORARIOS    = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
 const MEMLIBS     = ['MX.JCLFILE','MX.CTMR.PR12.SCHEFILE','MX.CTMR.PR21.SCHEFILE','MX.CTMR.PR31.SCHEFILE','MX.CTMR.PR41.SCHEFILE','DUMMY'];
 const EVENTOS_ISD = ['FORCE TABELA', 'FORCE JOB', 'ADICIONA CONDIÇÃO'];
@@ -36,10 +41,9 @@ const CORES_PERIOD = [
 const FILTROS_VAZIOS: FiltrosProcesso = {
   tabela: '', job: '', rotina: '', grupo: '', periodicidade: '', tasktype: '', confirm: '', memlib: '',
   carga: '', horarios_carga: [], isd: '', evento_isd: '',
-  tem_alerta: '', padrao: '', tipo_alerta: '',
+  tem_alerta: '', padrao: '', tipo_alerta: '', ambiente: [],
 };
 
-const trunc = (s: string, n: number) => s.length > n ? s.slice(0, n) + '…' : s;
 
 // ── Wrapper de gráfico ────────────────────────────────────────────────────────
 const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -56,8 +60,8 @@ const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 // ── 1. Pizza — Periodicidades ─────────────────────────────────────────────────
 const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const R = 100; const IR = 56; const CX = 190; const CY = 120;
-  const VW = 560; const VH = 260;
+  const R = 85; const IR = 48; const CX = 155; const CY = 100;
+  const VW = 480; const VH = 210;
   const pie   = d3.pie<{ periodicidade: string; total: number }>().value(d => d.total).sort(null);
   const arc   = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(IR).outerRadius(R);
   const arcLbl = d3.arc<d3.PieArcDatum<{ periodicidade: string; total: number }>>().innerRadius(R * 0.72).outerRadius(R * 0.72);
@@ -99,44 +103,33 @@ const GraficoPeriodPizza: React.FC<{ data: { periodicidade: string; total: numbe
   );
 };
 
-// ── 2. Barras horizontais — Top tabelas por jobs (scroll) ────────────────────
+// ── 2. Ranking de tabelas por nº de jobs ─────────────────────────────────────
 const GraficoJobsPorTabela: React.FC<{ data: { tabela: string; total_jobs: number }[] }> = ({ data }) => {
   if (!data.length) return null;
-  const barH = 20, VW = 520, ML = 100, MR = 32, MT = 8, MB = 8;
-  const IW_G = VW - ML - MR;
-  const IH   = data.length * (barH + 4);
-  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.total_jobs) || 1]).range([0, IW_G]).nice();
-  const y = d3.scaleBand().domain(data.map(d => d.tabela)).range([0, IH]).padding(0.15);
-
+  const maxVal = Math.max(...data.map(d => d.total_jobs), 1);
   return (
-    <Box sx={{ aspectRatio: `${VW} / 222`, overflowY: 'auto' }}>
-      <svg viewBox={`0 0 ${VW} ${IH + MT + MB}`} width="100%"
-           style={{ minHeight: IH + MT + MB }}>
-        <g transform={`translate(${ML},${MT})`}>
-          {x.ticks(5).map(t => (
-            <g key={t}>
-              <line x1={x(t)} x2={x(t)} y1={0} y2={IH} stroke="#f0f0f0" />
-              <text x={x(t)} y={IH + 14} textAnchor="middle" fontSize={9} fill="#888">{t}</text>
-            </g>
+    <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+      <Table size="small" sx={{ width: '100%' }}>
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', width: 130 }}>Tabela</TableCell>
+            <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', width: 70, whiteSpace: 'nowrap' }}>Nº de Jobs</TableCell>
+            <TableCell />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((d, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', width: 130, whiteSpace: 'nowrap' }}>{d.tabela}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', width: 70, whiteSpace: 'nowrap' }}>{d.total_jobs}</TableCell>
+              <TableCell>
+                <LinearProgress variant="determinate" value={(d.total_jobs / maxVal) * 100}
+                  color="primary" sx={{ height: 8, borderRadius: 4 }} />
+              </TableCell>
+            </TableRow>
           ))}
-          {data.map(d => (
-            <g key={d.tabela}>
-              <rect x={0} y={y(d.tabela)!} width={x(d.total_jobs)} height={y.bandwidth()}
-                    fill="#1976d2" rx={2} opacity={0.85}>
-                <title>{d.tabela}: {d.total_jobs} jobs</title>
-              </rect>
-              <text x={-4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
-                    textAnchor="end" fontSize={10} fill="#555">
-                {trunc(d.tabela, 11)}
-              </text>
-              <text x={x(d.total_jobs) + 4} y={(y(d.tabela) ?? 0) + y.bandwidth() / 2} dy="0.35em"
-                    fontSize={9} fill="#333" fontWeight="bold">
-                {d.total_jobs}
-              </text>
-            </g>
-          ))}
-        </g>
-      </svg>
+        </TableBody>
+      </Table>
     </Box>
   );
 };
@@ -192,11 +185,43 @@ const GraficoComparativo: React.FC<{
   );
 };
 
+// ── Split AL1/MZ1 reutilizável ────────────────────────────────────────────────
+const AmbSplit: React.FC<{ por: Record<string, number> }> = ({ por }) => {
+  const entries = Object.entries(por).sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return null;
+  return (
+    <Box sx={{ display: 'flex', gap: 0.5, mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+      {entries.map(([amb, val]) => {
+        const c = AMB_COLORS[amb] ?? { bg: 'action.hover', text: 'text.primary' };
+        return (
+          <Box key={amb} sx={{ flex: 1, textAlign: 'center', bgcolor: c.bg, borderRadius: 1, py: 0.3 }}>
+            <Typography sx={{ display: 'block', fontSize: '0.58rem', fontWeight: 700, color: c.text, lineHeight: 1.3, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+              {amb}
+            </Typography>
+            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
+              {val.toLocaleString('pt-BR')}
+            </Typography>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
+
+function ambPick(
+  por: Record<string, Record<string, number>> | undefined,
+  field: string,
+): Record<string, number> | undefined {
+  if (!por || !Object.keys(por).length) return undefined;
+  return Object.fromEntries(Object.entries(por).map(([k, v]) => [k, v[field] ?? 0]));
+}
+
 // ── Cards de resumo ───────────────────────────────────────────────────────────
 const ResumoCard: React.FC<{
   icon: React.ReactNode; label: string; value: number; color: string;
   subLabel?: string; subValue?: number;
-}> = ({ icon, label, value, color, subLabel, subValue }) => (
+  porAmbiente?: Record<string, number>;
+}> = ({ icon, label, value, color, subLabel, subValue, porAmbiente }) => (
   <Card sx={{ flex: '1 1 160px', minWidth: 140, borderTop: `3px solid ${color}` }}>
     <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, color }}>
@@ -213,6 +238,7 @@ const ResumoCard: React.FC<{
           </Box>
         </>
       )}
+      {porAmbiente && <AmbSplit por={porAmbiente} />}
     </CardContent>
   </Card>
 );
@@ -237,16 +263,25 @@ export const Tela1Processos: React.FC = () => {
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosProcesso>(FILTROS_VAZIOS);
   const [page, setPage]                   = useState(1);
   const [expandido, setExpandido]         = useState(true);
-  const [exibirSemExec, setExibirSemExec]       = useState(false);
-  const [exibirAlertasNP, setExibirAlertasNP]   = useState(false);
-  const [exibirJanela, setExibirJanela]         = useState(false);
 
-  const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
+const { data, isLoading, error } = useProcessos(filtrosAtivos, page);
   const { data: opcoes }           = useFiltrosDisponiveis();
   const { data: graficos }         = useGraficosProcessos(filtrosAtivos);
   const { data: semExec }          = useJobsSemExecucao(50);
-  const { data: alertasNP }        = useAlertasNaoPadrao();
-  const { data: janelaData }       = useJanelaCarga(7);
+  const { data: alertasNP }        = useAlertasNaoPadrao({
+    tabela:      filtrosAtivos.tabela      || undefined,
+    job:         filtrosAtivos.job         || undefined,
+    rotina:      filtrosAtivos.rotina      || undefined,
+    grupo:       filtrosAtivos.grupo       || undefined,
+    tipo_alerta: filtrosAtivos.tipo_alerta || undefined,
+  });
+  const { data: janelaData }       = useJanelaCarga({
+    dias:           7,
+    tabela:         filtrosAtivos.tabela         || undefined,
+    rotina:         filtrosAtivos.rotina         || undefined,
+    grupo:          filtrosAtivos.grupo          || undefined,
+    horarios_carga: filtrosAtivos.horarios_carga?.length ? filtrosAtivos.horarios_carga : undefined,
+  });
 
   const set = (campo: keyof FiltrosProcesso) => (valor: any) => {
     setFiltros(prev => {
@@ -281,8 +316,7 @@ export const Tela1Processos: React.FC = () => {
         <Collapse in={expandido}>
           <Divider />
           <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Linha única com scroll horizontal — todos os filtros lado a lado */}
-            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', overflowX: 'auto', pb: 0.5 }}>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <TextField label="Tabela" value={filtros.tabela} size="small"
                          sx={{ minWidth: 140, flexShrink: 0 }}
                          onChange={e => set('tabela')(e.target.value)} />
@@ -299,6 +333,20 @@ export const Tela1Processos: React.FC = () => {
               />
               <SelectFiltro label="Grupo" value={filtros.grupo || ''} onChange={set('grupo')}
                 opcoes={GRUPOS.map(g => ({ value: g, label: g }))} minWidth={130} />
+              <Autocomplete
+                multiple disableCloseOnSelect options={AMBIENTES}
+                value={filtros.ambiente ?? []}
+                onChange={(_, v) => setFiltros(f => ({ ...f, ambiente: v }))}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" color="info" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Ambiente" size="small" sx={{ minWidth: 140 }} />}
+                size="small"
+                sx={{ minWidth: 140, flexShrink: 0 }}
+              />
               <SelectFiltro label="Tipo" value={filtros.tasktype || ''} onChange={set('tasktype')}
                 opcoes={(opcoes?.tasktypes || []).map(t => ({ value: t, label: t }))} minWidth={120} />
               <SelectFiltro label="Periodicidade" value={filtros.periodicidade || ''} onChange={set('periodicidade')}
@@ -353,16 +401,20 @@ export const Tela1Processos: React.FC = () => {
       {/* ── Cards de Resumo ── */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <ResumoCard icon={<WorkIcon fontSize="small" />}
-          label="Total de JOBs" value={resumo?.total_jobs ?? 0} color="#1976d2" />
+          label="Total de JOBs" value={resumo?.total_jobs ?? 0} color="#1976d2"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'total_jobs')} />
         <ResumoCard icon={<TableChartIcon fontSize="small" />}
-          label="Tabelas" value={resumo?.total_tabelas ?? 0} color="#7b1fa2" />
+          label="Tabelas" value={resumo?.total_tabelas ?? 0} color="#7b1fa2"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'total_tabelas')} />
         <ResumoCard icon={<AutorenewIcon fontSize="small" />}
-          label="Tabelas em Carga" value={resumo?.tabelas_carga ?? 0} color="#2e7d32" />
+          label="Tabelas em Carga" value={resumo?.tabelas_carga ?? 0} color="#2e7d32"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_carga')} />
         <ResumoCard icon={<AccountTreeIcon fontSize="small" />}
-          label="Tabelas com ISD" value={resumo?.tabelas_isd ?? 0} color="#e65100" />
+          label="Tabelas com ISD" value={resumo?.tabelas_isd ?? 0} color="#e65100"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'tabelas_isd')} />
         <ResumoCard icon={<NotificationsActiveIcon fontSize="small" />}
-          label="Tabelas com Alertas" value={resumo?.tabelas_alerta ?? 0} color="#c62828"
-          subLabel="JOBs com alerta" subValue={resumo?.jobs_alerta ?? 0} />
+          label="JOBs com Alerta" value={resumo?.jobs_alerta ?? 0} color="#c62828"
+          porAmbiente={ambPick(resumo?.por_ambiente as any, 'jobs_alerta')} />
         <ResumoCard icon={<PowerOffIcon fontSize="small" />}
           label="Jobs Inativos (CTM×LOG)" value={semExec?.total ?? 0} color="#78909c" />
       </Box>
@@ -370,22 +422,8 @@ export const Tela1Processos: React.FC = () => {
       {/* ── Gráficos ── */}
       {graficos && (
         <>
-          {/* Linha 1: Pizza + Barras */}
+          {/* Linha 1: Três comparativos */}
           <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={5}>
-              <ChartCard title="Distribuição por Periodicidade">
-                <GraficoPeriodPizza data={graficos.periodicidades} />
-              </ChartCard>
-            </Grid>
-            <Grid item xs={12} md={7}>
-              <ChartCard title="Top 15 Tabelas por Número de JOBs">
-                <GraficoJobsPorTabela data={graficos.jobs_por_tabela} />
-              </ChartCard>
-            </Grid>
-          </Grid>
-
-          {/* Linha 2: Três comparativos */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} md={4}>
               <ChartCard title="Carga Automática — Tabelas">
                 <GraficoComparativo
@@ -408,29 +446,37 @@ export const Tela1Processos: React.FC = () => {
               </ChartCard>
             </Grid>
           </Grid>
+
+          {/* Linha 2: Pizza + Ranking de tabelas */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={12} md={6}>
+              <ChartCard title="Distribuição por Periodicidade">
+                <GraficoPeriodPizza data={graficos.periodicidades} />
+              </ChartCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard title="Tabelas por Número de JOBs">
+                <GraficoJobsPorTabela data={graficos.jobs_por_tabela} />
+              </ChartCard>
+            </Grid>
+          </Grid>
         </>
       )}
 
-      {/* ── Análise: Jobs Sem Execução + Alertas Não Padronizados (lado a lado) ── */}
+      {/* ── Jobs Inativos + Alertas Não Padronizados (sempre expandido, lado a lado) ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {/* Jobs Inativos (CTM × LOG) */}
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ height: '100%' }}>
-            <Box
-              sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-              onClick={() => setExibirSemExec(v => !v)}
-            >
-              <PowerOffIcon fontSize="small" color="action" />
-              <Typography variant="subtitle2" fontWeight={600}>Jobs Inativos (CTM × LOG)</Typography>
-              <Chip label={semExec?.total ?? 0} size="small" sx={{ ml: 0.5 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                {exibirSemExec ? 'Recolher ▲' : 'Expandir ▼'}
-              </Typography>
-            </Box>
-            <Collapse in={exibirSemExec}>
-              <Divider />
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: '16px !important' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <PowerOffIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+                  Jobs Inativos (CTM × LOG)
+                </Typography>
+                <Chip label={semExec?.total ?? 0} size="small" sx={{ ml: 0.5 }} />
+              </Box>
               {semExec && semExec.jobs.length > 0 ? (
-                <TableContainer>
+                <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'grey.100' }}>
@@ -457,36 +503,28 @@ export const Tela1Processos: React.FC = () => {
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
-              ) : (
-                <Box sx={{ px: 2, py: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Nenhum job inativo — todos os processos cadastrados possuem execuções no período.
-                  </Typography>
                 </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Nenhum job inativo — todos os processos cadastrados possuem execuções no período.
+                </Typography>
               )}
-            </Collapse>
-          </Paper>
+            </CardContent>
+          </Card>
         </Grid>
 
-        {/* Alertas Não Padronizados (≠ U-ECS) */}
         <Grid item xs={12} md={6}>
-          <Paper variant="outlined" sx={{ height: '100%' }}>
-            <Box
-              sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
-              onClick={() => setExibirAlertasNP(v => !v)}
-            >
-              <NotificationsActiveIcon fontSize="small" color="error" />
-              <Typography variant="subtitle2" fontWeight={600}>Alertas Não Padronizados (≠ U-ECS)</Typography>
-              <Chip label={alertasNP?.alertas.length ?? 0} size="small" color="error" sx={{ ml: 0.5 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                {exibirAlertasNP ? 'Recolher ▲' : 'Expandir ▼'}
-              </Typography>
-            </Box>
-            <Collapse in={exibirAlertasNP}>
-              <Divider />
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent sx={{ pb: '16px !important' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <NotificationsActiveIcon fontSize="small" color="error" />
+                <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+                  Alertas Não Padronizados (≠ U-ECS)
+                </Typography>
+                <Chip label={alertasNP?.alertas.length ?? 0} size="small" color="error" sx={{ ml: 0.5 }} />
+              </Box>
               {alertasNP && alertasNP.alertas.length > 0 ? (
-                <TableContainer>
+                <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'error.light' }}>
@@ -511,91 +549,80 @@ export const Tela1Processos: React.FC = () => {
                       ))}
                     </TableBody>
                   </Table>
-                </TableContainer>
-              ) : (
-                <Box sx={{ px: 2, py: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Nenhum alerta fora do padrão U-ECS encontrado.
-                  </Typography>
                 </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Nenhum alerta fora do padrão U-ECS encontrado.
+                </Typography>
               )}
-            </Collapse>
-          </Paper>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
 
       {/* ── Janela de Carga ── */}
-      <Paper variant="outlined" sx={{ mb: 3 }}>
-        <Box
-          sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
-          onClick={() => setExibirJanela(v => !v)}
-        >
-          <AccessTimeIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle2" fontWeight={600}>Janela de Carga — Análise de Pontualidade</Typography>
-          {janelaData?.janela && (
-            <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
-              {(() => {
-                const atrasadas  = janelaData.janela.filter(j => j.status === 'atrasada').length;
-                const adiantadas = janelaData.janela.filter(j => j.status === 'adiantada').length;
-                return (
-                  <>
-                    {atrasadas  > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`}  size="small" color="error" />}
-                    {adiantadas > 0 && <Chip label={`${adiantadas} adiantada${adiantadas !== 1 ? 's' : ''}`} size="small" color="info" />}
-                  </>
-                );
-              })()}
-            </Box>
-          )}
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-            {exibirJanela ? 'Recolher ▲' : 'Expandir ▼'}
-          </Typography>
-        </Box>
-        <Collapse in={exibirJanela}>
-          <Divider />
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        <CardContent sx={{ pb: '16px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <AccessTimeIcon fontSize="small" color="primary" />
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+              Janela de Carga — Análise de Pontualidade
+            </Typography>
+            {janelaData?.janela && (() => {
+              const atrasadas = janelaData.janela.filter(j => j.status === 'atrasada').length;
+              const noPrazo   = janelaData.janela.filter(j => j.status === 'no_prazo').length;
+              return (
+                <Box sx={{ display: 'flex', gap: 0.5, ml: 0.5 }}>
+                  {atrasadas > 0 && <Chip label={`${atrasadas} atrasada${atrasadas !== 1 ? 's' : ''}`} size="small" color="error" />}
+                  {noPrazo   > 0 && <Chip label={`${noPrazo} no prazo`} size="small" color="success" variant="outlined" />}
+                </Box>
+              );
+            })()}
+          </Box>
           {!janelaData?.janela.length ? (
-            <Typography variant="body2" color="text.secondary" sx={{ p: 2, fontStyle: 'italic' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
               Nenhuma tabela com carga programada encontrada nos últimos 7 dias.
             </Typography>
           ) : (
-            <TableContainer>
-              <Table size="small">
+            <Box sx={{ maxHeight: 320, overflowY: 'auto' }}>
+              <Table size="small" sx={{ width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    {['Tabela', 'Horário CTM', 'Dia', 'Primeiro Início Real', 'Atraso / Adiantamento', 'Situação'].map(c => (
+                    {['Tabela', 'Grupo', 'Horário CTM', 'Última Execução', 'Primeiro Início', 'Atraso', 'Situação'].map(c => (
                       <TableCell key={c} sx={{ color: 'white', fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{c}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => {
-                    const sinal = j.delta_minutos >= 0 ? '+' : '';
-                    return (
-                      <TableRow key={i} hover>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>
-                          {String(j.hora_real).padStart(2, '0')}:{String(j.min_real).padStart(2, '0')}
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>
-                          {sinal}{j.delta_minutos} min
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={j.status === 'no_prazo' ? 'No Prazo' : j.status === 'atrasada' ? 'Atrasada' : 'Adiantada'}
-                            size="small"
-                            color={j.status === 'no_prazo' ? 'success' : j.status === 'atrasada' ? 'error' : 'info'}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {(janelaData?.janela ?? []).map((j: JanelaCargaItem, i: number) => (
+                    <TableRow key={i} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{j.tabela}</TableCell>
+                      <TableCell>
+                        <Chip label={j.grupo?.split('-')[0] ?? j.grupo} size="small" variant="outlined" color="primary" />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{String(j.hora_programada).padStart(2, '0')}h00</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>{j.dia}</TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem' }}>
+                        {String(j.hora_real).padStart(2, '0')}:{String(j.min_real).padStart(2, '0')}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', color: j.delta_minutos > 30 ? 'error.main' : 'text.primary', fontWeight: j.delta_minutos > 30 ? 600 : 400 }}>
+                        {j.delta_minutos > 0 ? `+${j.delta_minutos} min` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={j.status === 'no_prazo' ? 'No Prazo' : 'Atrasada'}
+                          size="small"
+                          color={j.status === 'no_prazo' ? 'success' : 'error'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </TableContainer>
+            </Box>
           )}
-        </Collapse>
-      </Paper>
+        </CardContent>
+      </Card>
 
       {/* ── Tabela ── */}
       {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>}
