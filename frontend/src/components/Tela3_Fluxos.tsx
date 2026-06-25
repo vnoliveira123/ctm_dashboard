@@ -14,9 +14,10 @@ import { useFluxosGrafo, useRotinasFluxos, FiltrosFluxo, GrafoNode, GrafoEdge } 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const NW = 144;   // node width
 const NH = 58;    // node height
-const GRUPOS   = ['PR12', 'PR21', 'PR31', 'PR41'];
-const HORARIOS = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
-const FILTROS_VAZIOS: FiltrosFluxo = { grupo: [], tabela: [], job: [], rotina: [], posicao: '', carga: '', horario_carga: '', controle: '' };
+const GRUPOS    = ['PR12', 'PR21', 'PR31', 'PR41'];
+const AMBIENTES = ['AL1', 'MZ1'];
+const HORARIOS  = ['00', '01', '03', '07', '10', '13', '16', '19', '23'];
+const FILTROS_VAZIOS: FiltrosFluxo = { grupo: [], tabela: [], job: [], rotina: [], ambiente: [], posicao: '', carga: '', horario_carga: '', controle: '' };
 
 const COR: Record<string, string> = {
   inicio: '#2e7d32',
@@ -371,7 +372,7 @@ export const Tela3Fluxos: React.FC = () => {
       if (campo === 'carga' && v !== 'SIM') next.horario_carga = '';
       return next;
     });
-  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina') => (v: string[]) =>
+  const setArr = (campo: 'tabela' | 'job' | 'grupo' | 'rotina' | 'ambiente') => (v: string[]) =>
     setFiltros(prev => ({ ...prev, [campo]: v }));
 
   const aplicar = () => {
@@ -525,6 +526,18 @@ export const Tela3Fluxos: React.FC = () => {
                   value.map((v, i) => <Chip label={v} size="small" {...getTagProps({ index: i })} />)
                 }
                 renderInput={(params) => <TextField {...params} label="Rotina" size="small" sx={{ minWidth: 160 }} />}
+              />
+              <Autocomplete
+                multiple disableCloseOnSelect options={AMBIENTES}
+                value={filtros.ambiente ?? []}
+                onChange={(_, v) => setArr('ambiente')(v)}
+                renderOption={(props, option, { selected }) => (
+                  <li {...props}><Checkbox checked={selected} size="small" sx={{ mr: 1 }} />{option}</li>
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((v, i) => <Chip label={v} size="small" color="info" {...getTagProps({ index: i })} />)
+                }
+                renderInput={(params) => <TextField {...params} label="Ambiente" size="small" sx={{ minWidth: 140 }} />}
               />
               <FormControl size="small" sx={{ minWidth: 165 }}>
                 <InputLabel>Posição no Fluxo</InputLabel>
